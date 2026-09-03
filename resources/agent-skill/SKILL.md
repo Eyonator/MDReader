@@ -45,3 +45,7 @@ rendl "/path/to/file.md" &
 - Live reload: after the window is open, simply keep writing to the same file — every save appears in the window within ~1 second. No relaunch needed.
 - Rendl autosaves user edits back to the file. If the user may have edited the file in Rendl, re-read the file before overwriting it, and prefer appending/patching over blind rewrites.
 - Supported extensions: `.md`, `.markdown`, `.mdown` (plain text works too).
+
+## Writing Markdown for Rendl
+
+**Never hard-wrap lines.** Write each paragraph and each list item as one long line and let the editor wrap. Rendl renders soft line breaks literally, so text hard-wrapped at ~72/80 columns shows up as a narrow ragged column instead of flowing across the window. Headings, code blocks and tables are unaffected — only avoid manual line breaks inside paragraphs and list items.
