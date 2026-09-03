@@ -3,7 +3,7 @@
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
 const localeNl = require('./locales/nl.json');
 
-contextBridge.exposeInMainWorld('mdlezer', {
+contextBridge.exposeInMainWorld('rendl', {
   // Localized strings, keyed by locale code so more translations can be added.
   locales: { nl: localeNl },
   defaultLocale: 'nl',

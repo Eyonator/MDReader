@@ -1,5 +1,5 @@
 {
-  "app.name": "MD Lezer",
+  "app.name": "Rendl",
   "app.untitled": "Naamloos",
 
   "toolbar.new": "Nieuw",
@@ -22,8 +22,8 @@
 
   "editor.placeholder": "Begin met schrijven… Markdown wordt live weergegeven in de leesweergave.",
 
-  "welcome.title": "Welkom bij MD Lezer",
-  "welcome.subtitle": "Schrijf en lees Markdown-bestanden in een rustige, glasheldere omgeving.",
+  "welcome.title": "Welkom bij Rendl",
+  "welcome.subtitle": "Schrijf in kale Markdown, lees het prachtig gerenderd. Een rustige, glasheldere omgeving voor je tekst.",
   "welcome.newFile": "Nieuw bestand",
   "welcome.openFile": "Bestand openen",
   "welcome.hint": "Tip: sleep een .md-bestand in dit venster om het te openen.",

@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">Rendl app icon — dark</title>
+  <desc id="desc">A glass ribbon shaped like a lowercase r.</desc>
+  <defs>
+    <radialGradient id="blue" cx="100%" cy="80%" r="72%"><stop offset="0" stop-color="#1C3A6E" stop-opacity=".92"/><stop offset="1" stop-color="#1C3A6E" stop-opacity="0"/></radialGradient>
+    <radialGradient id="violet" cx="7%" cy="4%" r="65%"><stop offset="0" stop-color="#3A2A63" stop-opacity=".9"/><stop offset="1" stop-color="#3A2A63" stop-opacity="0"/></radialGradient>
+    <radialGradient id="teal" cx="0" cy="100%" r="65%"><stop offset="0" stop-color="#123C38"/><stop offset="1" stop-color="#123C38" stop-opacity="0"/></radialGradient>
+    <linearGradient id="stem" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5AC8FA"/><stop offset=".42" stop-color="#0A84FF"/><stop offset="1" stop-color="#1C3A6E"/></linearGradient>
+    <linearGradient id="bowl" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0A84FF"/><stop offset=".55" stop-color="#9E8CFF"/><stop offset="1" stop-color="#ECEFF4"/></linearGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="25"/></filter>
+  </defs>
+  <rect width="1024" height="1024" rx="220" fill="#0D1015"/>
+  <rect width="1024" height="1024" rx="220" fill="url(#blue)"/>
+  <rect width="1024" height="1024" rx="220" fill="url(#violet)"/>
+  <rect width="1024" height="1024" rx="220" fill="url(#teal)"/>
+  <path d="M340 780V386c0-91 74-165 165-165" fill="none" stroke="#0A84FF" stroke-opacity=".28" stroke-width="190" stroke-linecap="round" filter="url(#shadow)"/>
+  <path d="M340 780V386c0-91 74-165 165-165" fill="none" stroke="url(#stem)" stroke-width="164" stroke-linecap="round"/>
+  <path d="M392 398c70-104 191-160 309-124 61 19 104 54 129 104" fill="none" stroke="url(#bowl)" stroke-opacity=".94" stroke-width="150" stroke-linecap="round"/>
+  <path d="M291 382c14-100 99-178 202-182" fill="none" stroke="#ECEFF4" stroke-opacity=".34" stroke-width="11" stroke-linecap="round"/>
+  <path d="M472 294c91-65 205-75 295-19" fill="none" stroke="#ECEFF4" stroke-opacity=".48" stroke-width="10" stroke-linecap="round"/>
+  <rect x="8" y="8" width="1008" height="1008" rx="212" fill="none" stroke="#ECEFF4" stroke-opacity=".12" stroke-width="8"/>
+</svg>

@@ -21,4 +21,4 @@ import 'prismjs/components/prism-csharp';
 import 'prismjs/components/prism-sql';
 
 window.toastui = { Editor };
-window.mdlezerEditorPlugins = { codeSyntaxHighlight, Prism };
+window.rendlEditorPlugins = { codeSyntaxHighlight, Prism };

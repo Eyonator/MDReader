@@ -1,5 +1,5 @@
 /* ============================================================
-   MD Lezer — liquid glass UI
+   Rendl — liquid glass UI
    Theme tokens: light on body[data-theme="light"], dark on
    body[data-theme="dark"]. JS resolves "auto" to one of the two.
    ============================================================ */
@@ -566,6 +566,11 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
   font-weight: 600;
 }
 
+/* Toast UI colours the paragraph inside a header cell separately */
+.toastui-editor-contents th p {
+  color: var(--text-primary);
+}
+
 .toastui-editor-contents ul > li::before { background-color: var(--text-tertiary); }
 .toastui-editor-contents ol > li::before { color: var(--text-secondary); }
 
@@ -650,19 +655,11 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
 }
 
 .welcome-glyph {
-  width: 64px;
-  height: 64px;
-  margin: 0 auto 18px;
-  display: grid;
-  place-items: center;
-  font-family: var(--font-display);
-  font-size: 26px;
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  color: var(--accent-contrast);
-  background: linear-gradient(145deg, var(--accent), #5ac8fa);
-  border-radius: 18px;
-  box-shadow: 0 10px 26px -8px var(--accent);
+  display: block;
+  width: 76px;
+  height: 76px;
+  margin: 0 auto 16px;
+  filter: drop-shadow(0 10px 22px rgba(10, 132, 255, 0.35));
 }
 
 .welcome-card h1 {

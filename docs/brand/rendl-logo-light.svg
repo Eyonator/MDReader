@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 300" role="img" aria-labelledby="title">
+  <title id="title">Rendl logo for light backgrounds</title>
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5AC8FA"/><stop offset=".48" stop-color="#007AFF"/><stop offset="1" stop-color="#3A2A63"/></linearGradient></defs>
+  <g transform="translate(18 12) scale(.52)">
+    <path d="M150 420V209c0-60 49-109 109-109" fill="none" stroke="url(#g)" stroke-width="92" stroke-linecap="round"/>
+    <path d="M179 214c46-69 125-106 203-82 40 12 68 36 85 69" fill="none" stroke="url(#g)" stroke-width="84" stroke-linecap="round"/>
+  </g>
+  <text x="305" y="211" fill="#1B1F26" font-family="Segoe UI Variable Display, Segoe UI, Inter, system-ui, sans-serif" font-size="184" font-weight="650" letter-spacing="-10">Rendl</text>
+</svg>

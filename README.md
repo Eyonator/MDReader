@@ -1,6 +1,8 @@
-# MD Lezer
+# Rendl
 
-Een kleine, moderne Windows-app om Markdown-bestanden te schrijven én te lezen, met een "liquid glass"-interface.
+**Markdown reader & writer — Write plain. Read beautifully.** *(uitspraak: REN-dl)*
+
+Een kleine, moderne Windows-app om Markdown-bestanden te schrijven én te lezen, met een "liquid glass"-interface. De naam komt van *render*: de kern van de app is het wisselen tussen kale Markdown-bron en de prachtig gerenderde weergave. Zie `docs/brand/BRAND.md` voor de merkidentiteit.
 
 ## Mogelijkheden
 
@@ -26,8 +28,8 @@ npm run dist
 
 Dit bouwt twee bestanden in `dist/`:
 
-- **`MDLezer-Portable-<versie>.exe`** — portable: geen installatie nodig, direct te starten (ook vanaf een USB-stick)
-- **`MDLezer-Setup-<versie>.exe`** — installer: installeert de app én koppelt `.md`, `.markdown` en `.mdown` aan MD Lezer, zodat dubbelklikken op een Markdown-bestand de app opent
+- **`Rendl-Portable-<versie>.exe`** — portable: geen installatie nodig, direct te starten (ook vanaf een USB-stick)
+- **`Rendl-Setup-<versie>.exe`** — installer: installeert de app én koppelt `.md`, `.markdown` en `.mdown` aan Rendl, zodat dubbelklikken op een Markdown-bestand de app opent
 
 ## Structuur
 

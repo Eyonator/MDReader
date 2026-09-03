@@ -1,10 +1,10 @@
 'use strict';
 
-/* MD Lezer renderer. All UI text comes from the locale files in /locales;
+/* Rendl renderer. All UI text comes from the locale files in /locales;
    use t('key') - never hard-code user-facing strings here. */
 
 (async function bootstrap() {
-  const api = window.mdlezer || (await createDemoApi());
+  const api = window.rendl || (await createDemoApi());
   const strings = api.locales[api.defaultLocale] || {};
 
   const $ = (selector) => document.querySelector(selector);
@@ -82,7 +82,7 @@
     toastui.Editor.setLanguage(['nl', 'nl-NL'], strings.toastui);
   }
 
-  const { codeSyntaxHighlight, Prism } = window.mdlezerEditorPlugins || {};
+  const { codeSyntaxHighlight, Prism } = window.rendlEditorPlugins || {};
 
   const editor = new toastui.Editor({
     el: elements.editorRoot,
@@ -485,7 +485,7 @@
       locales,
       defaultLocale: 'nl',
       demoContent: [
-        '# MD Lezer\n',
+        '# Rendl\n',
         'Een kleine, moderne app om **Markdown** te *schrijven* en te lezen.\n',
         '## Mogelijkheden\n',
         '- Volwaardige opmaakwerkbalk boven de editor',

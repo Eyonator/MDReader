@@ -1,8 +1,8 @@
 {
-  "name": "md-lezer",
-  "productName": "MD Lezer",
+  "name": "rendl",
+  "productName": "Rendl",
   "version": "1.0.0",
-  "description": "A small, modern Windows app to read and write Markdown files.",
+  "description": "Rendl — Markdown reader & writer. Write plain. Read beautifully.",
   "main": "main.js",
   "scripts": {
     "start": "electron .",
@@ -21,8 +21,8 @@
     "ws": "^8.21.3"
   },
   "build": {
-    "appId": "nl.vansoelen.mdlezer",
-    "productName": "MD Lezer",
+    "appId": "nl.vansoelen.rendl",
+    "productName": "Rendl",
     "directories": {
       "output": "dist"
     },
@@ -60,14 +60,14 @@
       ]
     },
     "portable": {
-      "artifactName": "MDLezer-Portable-${version}.exe"
+      "artifactName": "Rendl-Portable-${version}.exe"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "perMachine": false,
-      "artifactName": "MDLezer-Setup-${version}.exe",
-      "shortcutName": "MD Lezer"
+      "artifactName": "Rendl-Setup-${version}.exe",
+      "shortcutName": "Rendl"
     }
   }
 }
