@@ -572,6 +572,30 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
   border-radius: 12px;
 }
 
+/* Markdown source view: the bundled themes colour inline code and code
+   blocks low-contrast red; use a readable tint on our own chip instead. */
+.toastui-editor-md-code,
+.toastui-editor-dark .toastui-editor-md-code,
+body[data-theme="light"] .toastui-editor-md-code {
+  background: var(--inline-code-bg);
+  border-radius: 4px;
+  padding: 1px 3px;
+}
+
+/* The text inside carries .toastui-editor-md-marked-text, which the dark
+   theme colours red with higher specificity — match the compound. */
+.toastui-editor-md-code.toastui-editor-md-marked-text,
+.toastui-editor-dark .toastui-editor-md-code.toastui-editor-md-marked-text,
+body[data-theme="light"] .toastui-editor-md-code.toastui-editor-md-marked-text {
+  color: var(--hljs-title);
+}
+
+.toastui-editor-md-code-block,
+.toastui-editor-dark .toastui-editor-md-code-block,
+body[data-theme="light"] .toastui-editor-md-code-block {
+  color: var(--text-primary);
+}
+
 /* Inline code: the bundled dark theme uses a low-contrast red on its own
    dark chip; win on specificity and use readable primary text instead. */
 .toastui-editor-contents code,
