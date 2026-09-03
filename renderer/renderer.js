@@ -427,6 +427,23 @@
     if (installed) installButton.hidden = true;
   });
 
+  const updateButton = $('#btn-update');
+  api.onUpdateAvailable(({ version }) => {
+    updateButton.textContent = t('update.available', { version });
+    updateButton.hidden = false;
+  });
+  updateButton.addEventListener('click', async () => {
+    // An untitled document with changes would be lost by the restart.
+    if (!state.filePath && isDirty() && !(await confirmDiscardIfDirty())) return;
+    updateButton.disabled = true;
+    updateButton.textContent = t('update.downloading');
+    const started = await api.installUpdate();
+    if (!started) {
+      updateButton.disabled = false;
+      updateButton.hidden = true;
+    }
+  });
+
   for (const item of elements.modeSwitch.querySelectorAll('.segmented-item')) {
     item.addEventListener('click', () => applyEditorMode(item.dataset.mode));
   }
@@ -592,6 +609,8 @@
       installApp: async () => false,
       historyGet: async () => [],
       historySave: async () => {},
+      onUpdateAvailable: () => {},
+      installUpdate: async () => false,
     };
   }
 })();

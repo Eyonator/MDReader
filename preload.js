@@ -39,6 +39,10 @@ contextBridge.exposeInMainWorld('rendl', {
   canInstall: () => ipcRenderer.invoke('app:can-install'),
   installApp: () => ipcRenderer.invoke('app:install'),
 
+  // Updates.
+  onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (_event, info) => callback(info)),
+  installUpdate: () => ipcRenderer.invoke('update:install'),
+
   // Persistent per-document history (cross-session undo).
   historyGet: (documentPath) => ipcRenderer.invoke('history:get', documentPath),
   historySave: (documentPath, entries) => ipcRenderer.invoke('history:save', documentPath, entries),

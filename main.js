@@ -1,6 +1,6 @@
 'use strict';
 
-const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
@@ -107,6 +107,92 @@ function watchFile(filePath) {
   });
 }
 
+// --- Update checker & updater ---------------------------------------------
+// Every start checks the latest GitHub release. On Windows an update is a
+// one-click flow that reuses the silent in-app installation: download the
+// new portable exe, quit, "--install-silent --relaunch". Other platforms
+// open the release page. A private repo (or being offline) fails silently.
+
+const UPDATE_REPO = 'Eyonator/MDReader';
+let pendingUpdate = null;
+
+function compareVersions(a, b) {
+  const pa = String(a).split('.').map(Number);
+  const pb = String(b).split('.').map(Number);
+  for (let i = 0; i < 3; i++) {
+    const diff = (pa[i] || 0) - (pb[i] || 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+async function checkForUpdates() {
+  if (!app.isPackaged && !process.env.RENDL_UPDATE_FEED) return;
+  try {
+    const feedUrl = process.env.RENDL_UPDATE_FEED
+      || `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
+    const response = await net.fetch(feedUrl, {
+      headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'Rendl-updater' },
+    });
+    if (!response.ok) return;
+    const release = await response.json();
+    const latestVersion = String(release.tag_name || '').replace(/^v/, '');
+    if (!latestVersion || compareVersions(latestVersion, app.getVersion()) <= 0) return;
+
+    const assetName = `Rendl-${latestVersion}-win.exe`;
+    const asset = (release.assets || []).find((entry) => entry.name === assetName);
+    pendingUpdate = {
+      version: latestVersion,
+      assetUrl: asset ? asset.browser_download_url : null,
+      releaseUrl: release.html_url,
+    };
+    if (mainWindow) mainWindow.webContents.send('update:available', { version: latestVersion });
+  } catch { /* offline, rate-limited or private repo: stay quiet */ }
+}
+
+ipcMain.handle('update:install', async () => {
+  if (!pendingUpdate) return false;
+
+  // Only Windows gets the in-place update; elsewhere show the release page.
+  if (process.platform !== 'win32' || !pendingUpdate.assetUrl) {
+    shell.openExternal(pendingUpdate.releaseUrl);
+    return false;
+  }
+
+  try {
+    const response = await net.fetch(pendingUpdate.assetUrl, {
+      headers: { 'User-Agent': 'Rendl-updater' },
+    });
+    if (!response.ok) throw new Error(`download failed (${response.status})`);
+    const buffer = Buffer.from(await response.arrayBuffer());
+    const updateExe = path.join(app.getPath('temp'), `Rendl-${pendingUpdate.version}-update.exe`);
+    await fsp.writeFile(updateExe, buffer);
+
+    // Preserve the user's original agent-skill choice.
+    const skillInstalled = fs.existsSync(path.join(app.getPath('home'), '.claude', 'skills', 'rendl', 'SKILL.md'));
+    const updateArgs = ['--install-silent', ...(skillInstalled ? [] : ['--no-skill'])];
+
+    // Give this process a few seconds to exit, run the silent install and
+    // relaunch from the cmd chain itself: the portable launcher kills its
+    // own child processes via a job object when it exits, so the new app
+    // must be started by cmd (outside that job), not by the installer run.
+    const installedExe = path.join(INSTALL_DIR, 'Rendl.exe');
+    spawn('cmd.exe', ['/c', `ping -n 4 127.0.0.1 > nul & "${updateExe}" ${updateArgs.join(' ')} && start "" "${installedExe}"`], {
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+      cwd: app.getPath('temp'),
+    }).unref();
+
+    forceClose = true;
+    if (mainWindow) mainWindow.close();
+    return true;
+  } catch (error) {
+    dialog.showErrorBox(t('update.failed.title'), `${t('update.failed.message')}\n${error.message}`);
+    return false;
+  }
+});
+
 // --- Persistent per-document history --------------------------------------
 // Snapshots of every saved state, kept in a hidden folder under
 // %LOCALAPPDATA%\Rendl\history, so Ctrl+Z can step back into previous
@@ -193,7 +279,17 @@ async function performInstall() {
   // treated as a plain file instead of a directory.
   process.noAsar = true;
   try {
-    await fsp.rm(INSTALL_DIR, { recursive: true, force: true });
+    // During an update the previous copy may still be exiting and holding a
+    // lock on its own exe; retry for a while before giving up.
+    for (let attempt = 0; ; attempt++) {
+      try {
+        await fsp.rm(INSTALL_DIR, { recursive: true, force: true });
+        break;
+      } catch (error) {
+        if (attempt >= 9) throw error;
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
     await fsp.cp(sourceDir, INSTALL_DIR, { recursive: true });
   } finally {
     process.noAsar = false;
@@ -599,6 +695,7 @@ if (!hasSingleInstanceLock) {
     }
 
     createMainWindow();
+    setTimeout(checkForUpdates, 3000);
 
     app.on('activate', () => {
       if (BrowserWindow.getAllWindows().length === 0) createMainWindow();

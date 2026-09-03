@@ -68,6 +68,12 @@
   "install.failed.title": "Installeren mislukt",
   "install.failed.message": "Rendl kon niet worden geïnstalleerd.",
 
+  "update.available": "Update {version}",
+  "update.tooltip": "Nieuwe versie beschikbaar — klik om bij te werken. Rendl start daarna opnieuw.",
+  "update.downloading": "Downloaden…",
+  "update.failed.title": "Update mislukt",
+  "update.failed.message": "De update kon niet worden gedownload of geïnstalleerd.",
+
   "toastui": {
     "Markdown": "Markdown",
     "WYSIWYG": "WYSIWYG",
