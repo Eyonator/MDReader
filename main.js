@@ -81,25 +81,18 @@ async function readFileForRenderer(filePath) {
   return { path: filePath, name: path.basename(filePath), content, recent };
 }
 
-// --- Live reload: watch the open file and push disk changes to the UI -----
+// --- Live reload: watch every open file and push disk changes to the UI ---
 // Stat polling (fs.watchFile) survives editors that replace files on save.
+// With tabs, the renderer reconciles the watched set to its open documents.
 
-let watchedPath = null;
-
-function unwatchFile() {
-  if (watchedPath) {
-    fs.unwatchFile(watchedPath);
-    watchedPath = null;
-  }
-}
+const watchedPaths = new Set();
 
 function watchFile(filePath) {
-  if (watchedPath === filePath) return;
-  unwatchFile();
-  watchedPath = filePath;
+  if (watchedPaths.has(filePath)) return;
+  watchedPaths.add(filePath);
   fs.watchFile(filePath, { interval: 400 }, async (current, previous) => {
     if (current.mtimeMs === previous.mtimeMs && current.size === previous.size) return;
-    if (!mainWindow || filePath !== watchedPath) return;
+    if (!mainWindow || !watchedPaths.has(filePath)) return;
     try {
       const content = await fsp.readFile(filePath, 'utf8');
       mainWindow.webContents.send('file:changed-on-disk', { path: filePath, content });
@@ -108,6 +101,95 @@ function watchFile(filePath) {
     }
   });
 }
+
+function unwatchFile(filePath) {
+  if (!watchedPaths.has(filePath)) return;
+  fs.unwatchFile(filePath);
+  watchedPaths.delete(filePath);
+}
+
+function setWatchedFiles(filePaths) {
+  const next = new Set(filePaths.filter(Boolean));
+  for (const existing of [...watchedPaths]) {
+    if (!next.has(existing)) unwatchFile(existing);
+  }
+  for (const filePath of next) watchFile(filePath);
+}
+
+// --- Projects: a folder whose Markdown files show in the sidebar ----------
+
+const PROJECT_FILE_EXTENSIONS = /\.(md|markdown|mdown)$/i;
+const PROJECT_SKIP_DIRS = new Set(['node_modules', 'dist', 'vendor', 'bower_components', '__pycache__']);
+const PROJECT_MAX_DEPTH = 4;
+const PROJECT_MAX_FILES = 400;
+
+async function scanProjectFolder(rootDir) {
+  const files = [];
+
+  async function walk(dir, depth) {
+    if (depth > PROJECT_MAX_DEPTH || files.length >= PROJECT_MAX_FILES) return;
+    let entries;
+    try {
+      entries = await fsp.readdir(dir, { withFileTypes: true });
+    } catch {
+      return; // Unreadable directory; skip.
+    }
+    entries.sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: 'base' }));
+    for (const entry of entries) {
+      if (files.length >= PROJECT_MAX_FILES) return;
+      if (entry.name.startsWith('.')) continue;
+      const fullPath = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (!PROJECT_SKIP_DIRS.has(entry.name.toLowerCase())) await walk(fullPath, depth + 1);
+      } else if (PROJECT_FILE_EXTENSIONS.test(entry.name)) {
+        files.push({ path: fullPath, relative: path.relative(rootDir, fullPath) });
+      }
+    }
+  }
+
+  await walk(rootDir, 0);
+  return { root: rootDir, name: path.basename(rootDir), files };
+}
+
+const recentProjectsPath = () => path.join(app.getPath('userData'), 'recent-projects.json');
+
+async function readRecentProjects() {
+  try {
+    const parsed = JSON.parse(await fsp.readFile(recentProjectsPath(), 'utf8'));
+    return Array.isArray(parsed) ? parsed.filter((entry) => typeof entry === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+async function addRecentProject(dirPath) {
+  const list = await readRecentProjects();
+  const next = [dirPath, ...list.filter((entry) => entry !== dirPath)].slice(0, 8);
+  try {
+    await fsp.writeFile(recentProjectsPath(), JSON.stringify(next, null, 2), 'utf8');
+  } catch { /* convenience only */ }
+  return next;
+}
+
+ipcMain.handle('project:open-dialog', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title: t('dialog.openFolder.title'),
+    properties: ['openDirectory'],
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  const project = await scanProjectFolder(result.filePaths[0]);
+  await addRecentProject(project.root);
+  return project;
+});
+
+ipcMain.handle('project:scan', async (_event, dirPath) => {
+  if (!fs.existsSync(dirPath)) return null;
+  const project = await scanProjectFolder(dirPath);
+  await addRecentProject(project.root);
+  return project;
+});
+
+ipcMain.handle('watch:set', (_event, filePaths) => setWatchedFiles(filePaths));
 
 // --- Update checker & updater ---------------------------------------------
 // Every start checks the latest GitHub release. On Windows an update is a
@@ -581,7 +663,7 @@ function createMainWindow() {
   });
 
   mainWindow.on('closed', () => {
-    unwatchFile();
+    setWatchedFiles([]);
     mainWindow = null;
   });
 }
@@ -608,8 +690,6 @@ ipcMain.handle('file:save', async (_event, filePath, content) => {
   watchFile(filePath);
   return { path: filePath, name: path.basename(filePath), recent };
 });
-
-ipcMain.handle('file:unwatch', () => unwatchFile());
 
 ipcMain.handle('file:save-dialog', async (_event, content, suggestedName) => {
   const result = await dialog.showSaveDialog(mainWindow, {

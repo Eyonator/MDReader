@@ -15,8 +15,16 @@
     docName: $('#doc-name'),
     dirtyDot: $('#dirty-dot'),
     sidebar: $('#sidebar'),
+    sidebarSwitch: $('#sidebar-switch'),
+    sidebarThumb: $('#sidebar-thumb'),
+    viewProject: $('#view-project'),
+    viewRecent: $('#view-recent'),
+    projectName: $('#project-name'),
+    projectList: $('#project-list'),
+    projectEmpty: $('#project-empty'),
     recentList: $('#recent-list'),
     recentEmpty: $('#recent-empty'),
+    tabbarTabs: $('#tabbar-tabs'),
     toast: $('#toast'),
     dropIndicator: $('#drop-indicator'),
     modeSwitch: $('#mode-switch'),
@@ -28,13 +36,11 @@
   };
 
   const state = {
-    filePath: null,
-    fileName: null,
-    savedContent: '',
-    eol: '\r\n', // Line-ending style of the file on disk; the editor works in LF.
     themePref: localStorage.getItem('themePref') || 'auto',
     systemTheme: 'light',
     editorMode: localStorage.getItem('editorMode') === 'markdown' ? 'markdown' : 'wysiwyg',
+    sidebarView: localStorage.getItem('sidebarView') === 'recent' ? 'recent' : 'project',
+    project: null, // { root, name, files: [{path, relative}] }
   };
 
   let loadingDocument = false; // Suppresses change handling while we set content.
@@ -44,10 +50,6 @@
   function normalizeContent(raw) {
     if (raw.charCodeAt(0) === 0xfeff) raw = raw.slice(1); // strip BOM
     return raw.replace(/\r\n/g, '\n');
-  }
-
-  function serializeContent(markdown) {
-    return state.eol === '\r\n' ? markdown.replace(/\n/g, '\r\n') : markdown;
   }
 
   function detectEol(raw) {
@@ -101,6 +103,196 @@
     return editor.getMarkdown();
   }
 
+  // ---------- tabs ----------
+  // Each open document is a tab. The active tab's content lives in the
+  // editor; background tabs keep their markdown in `content`. Each tab has
+  // its own line-ending style, scroll position and undo-history state.
+
+  let nextTabId = 1;
+  const tabs = [];
+  let activeTabId = null;
+
+  function activeTab() {
+    return tabs.find((tab) => tab.id === activeTabId) || null;
+  }
+
+  function makeTab({ path = null, name = null, content = '' }) {
+    return {
+      id: nextTabId++,
+      filePath: path,
+      fileName: name,
+      eol: detectEol(content),
+      content: normalizeContent(content),
+      savedContent: normalizeContent(content),
+      needsBaseline: true, // savedContent becomes editor-normalized on first activation
+      scrollTop: 0,
+      history: { stack: [], index: -1, baseline: '', pending: true },
+    };
+  }
+
+  function isTabDirty(tab) {
+    if (!tab) return false;
+    if (tab.id === activeTabId) return getMarkdown() !== tab.savedContent;
+    if (tab.needsBaseline) return false; // untouched since load
+    return tab.content !== tab.savedContent;
+  }
+
+  function serializeTabContent(tab, markdown) {
+    return tab.eol === '\r\n' ? markdown.replace(/\n/g, '\r\n') : markdown;
+  }
+
+  function syncActiveIntoTab() {
+    const tab = activeTab();
+    if (!tab) return;
+    tab.content = getMarkdown();
+    tab.scrollTop = editor.getScrollTop();
+  }
+
+  function activateTab(id, { focus = true } = {}) {
+    if (id === activeTabId) return;
+    const target = tabs.find((tab) => tab.id === id);
+    if (!target) return;
+
+    if (activeTab()) syncActiveIntoTab();
+
+    activeTabId = id;
+    loadingDocument = true;
+    editor.setMarkdown(target.content, false);
+    if (target.needsBaseline) {
+      target.savedContent = getMarkdown();
+      target.needsBaseline = false;
+    }
+    target.content = getMarkdown();
+    loadingDocument = false;
+
+    if (target.history.pending) initHistory(target);
+    else activeHistoryToBaseline(target);
+
+    editor.setScrollTop(target.scrollTop || 0);
+    if (focus) editor.focus();
+    renderTabs();
+    renderProjectList();
+    updateDocumentChrome();
+    updateStatistics();
+    persistSession();
+  }
+
+  function activeHistoryToBaseline(tab) {
+    // Re-anchor the cross-session baseline to the tab's current content so
+    // the snapshot walk keeps working after switching back to this tab.
+    tab.history.baseline = getMarkdown();
+  }
+
+  async function openInTab(filePath, { background = false } = {}) {
+    const existing = tabs.find((tab) => tab.filePath === filePath);
+    if (existing) {
+      if (!background) activateTab(existing.id);
+      return existing;
+    }
+    try {
+      const result = await api.readFile(filePath);
+      const tab = makeTab(result);
+      tabs.push(tab);
+      renderRecentList(result.recent);
+      renderTabs();
+      updateWatchedFiles();
+      if (!background) activateTab(tab.id);
+      persistSession();
+      return tab;
+    } catch {
+      showToast(t('error.openFailed.message'));
+      refreshRecentList();
+      return null;
+    }
+  }
+
+  function newTab() {
+    const tab = makeTab({ content: '' });
+    tabs.push(tab);
+    renderTabs();
+    activateTab(tab.id);
+  }
+
+  async function closeTab(id) {
+    const tab = tabs.find((entry) => entry.id === id);
+    if (!tab) return;
+
+    if (isTabDirty(tab)) {
+      if (tab.filePath) {
+        await saveTab(tab, { silent: true });
+      } else {
+        if (tab.id !== activeTabId) activateTab(tab.id);
+        const choice = await api.confirmDiscard({ documentName: tab.fileName || t('app.untitled') });
+        if (choice === 'cancel') return;
+        if (choice === 'save' && !(await saveTabAs(tab))) return;
+      }
+    }
+
+    const index = tabs.indexOf(tab);
+    tabs.splice(index, 1);
+
+    if (tab.id === activeTabId) {
+      activeTabId = null;
+      if (tabs.length === 0) {
+        newTab();
+      } else {
+        activateTab(tabs[Math.min(index, tabs.length - 1)].id);
+      }
+    } else {
+      renderTabs();
+    }
+    updateWatchedFiles();
+    persistSession();
+  }
+
+  function cycleTab(direction) {
+    if (tabs.length < 2) return;
+    const index = tabs.findIndex((tab) => tab.id === activeTabId);
+    const next = (index + direction + tabs.length) % tabs.length;
+    activateTab(tabs[next].id);
+  }
+
+  function renderTabs() {
+    elements.tabbarTabs.innerHTML = '';
+    for (const tab of tabs) {
+      const el = document.createElement('div');
+      el.className = 'tab' + (tab.id === activeTabId ? ' is-active' : '');
+      el.title = tab.filePath || t('app.untitled');
+
+      const label = document.createElement('span');
+      label.className = 'tab-label';
+      label.textContent = tab.fileName || t('app.untitled');
+      el.appendChild(label);
+
+      if (isTabDirty(tab) && !tab.filePath) {
+        const dot = document.createElement('span');
+        dot.className = 'tab-dirty';
+        el.appendChild(dot);
+      }
+
+      const close = document.createElement('button');
+      close.className = 'tab-close';
+      close.title = t('tabs.close');
+      close.innerHTML = '<svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7m0-7l-7 7"/></svg>';
+      close.addEventListener('click', (event) => { event.stopPropagation(); closeTab(tab.id); });
+      el.appendChild(close);
+
+      el.addEventListener('click', () => activateTab(tab.id));
+      el.addEventListener('auxclick', (event) => { if (event.button === 1) closeTab(tab.id); });
+      elements.tabbarTabs.appendChild(el);
+    }
+  }
+
+  function updateWatchedFiles() {
+    api.setWatchedFiles(tabs.map((tab) => tab.filePath).filter(Boolean));
+  }
+
+  function persistSession() {
+    localStorage.setItem('openTabs', JSON.stringify(tabs.map((tab) => tab.filePath).filter(Boolean)));
+    const active = activeTab();
+    localStorage.setItem('activeTabPath', (active && active.filePath) || '');
+  }
+
   // ---------- theme ----------
 
   const TITLEBAR_SYMBOL_COLORS = { light: '#3b424c', dark: '#e2e6ec' };
@@ -140,36 +332,33 @@
       item.classList.toggle('is-active', item.dataset.mode === mode);
       item.setAttribute('aria-selected', String(item.dataset.mode === mode));
     }
-    positionSegmentedThumb(animate);
+    positionThumb(elements.modeSwitch, elements.segmentedThumb, animate);
   }
 
-  function positionSegmentedThumb(animate = true) {
-    const active = elements.modeSwitch.querySelector('.segmented-item.is-active');
+  function positionThumb(container, thumb, animate = true) {
+    const active = container.querySelector('.segmented-item.is-active');
     if (!active) return;
-    const thumb = elements.segmentedThumb;
     if (!animate) thumb.style.transition = 'none';
     thumb.style.left = `${active.offsetLeft}px`;
     thumb.style.width = `${active.offsetWidth}px`;
     if (!animate) requestAnimationFrame(() => { thumb.style.transition = ''; });
   }
 
-  // ---------- document state ----------
-
-  function isDirty() {
-    return getMarkdown() !== state.savedContent;
-  }
+  // ---------- document chrome & statistics ----------
 
   function updateDocumentChrome() {
-    const dirty = isDirty();
-    elements.docName.textContent = state.fileName || t('app.untitled');
+    const tab = activeTab();
+    const dirty = isTabDirty(tab);
+    const name = (tab && tab.fileName) || t('app.untitled');
+    elements.docName.textContent = name;
     elements.dirtyDot.hidden = !dirty;
 
     let statusKey = 'status.saved';
-    if (dirty) statusKey = state.filePath ? 'status.saving' : 'status.unsaved';
+    if (dirty) statusKey = tab && tab.filePath ? 'status.saving' : 'status.unsaved';
     elements.statusSaved.textContent = t(statusKey);
     elements.statusSaved.classList.toggle('is-unsaved', dirty);
 
-    document.title = `${dirty ? '• ' : ''}${state.fileName || t('app.untitled')} — ${t('app.name')}`;
+    document.title = `${dirty ? '• ' : ''}${name} — ${t('app.name')}`;
   }
 
   function updateStatistics() {
@@ -180,70 +369,50 @@
     elements.statusReading.textContent = t('status.readingTime', { minutes: Math.max(1, Math.ceil(words / 220)) });
   }
 
-  function setDocument({ path = null, name = null, content = '' }) {
-    loadingDocument = true;
-    state.filePath = path;
-    state.fileName = name;
-    state.eol = detectEol(content);
-    editor.setMarkdown(normalizeContent(content), false);
-    // Compare against the editor's own serialization so formatting
-    // normalisation never counts as an unsaved change.
-    state.savedContent = getMarkdown();
-    loadingDocument = false;
-
-    updateDocumentChrome();
-    updateStatistics();
-    editor.setScrollTop(0);
-    editor.focus();
-    initHistory(path);
-  }
-
   // ---------- persistent history (cross-session undo) ----------
-  // The editor's own Ctrl+Z/Ctrl+Y covers this session. On top of that we
-  // keep saved-state snapshots per document (stored by the main process in a
-  // hidden %LOCALAPPDATA%\Rendl\history folder). When the in-session history
-  // has nothing left to undo (content equals the session baseline), Ctrl+Z
-  // steps back through the persisted snapshots — also right after reopening
-  // a document in a fresh session. Ctrl+Y walks forward again.
+  // The editor's own Ctrl+Z/Ctrl+Y covers this session. On top of that each
+  // tab keeps saved-state snapshots (stored by the main process in a hidden
+  // %LOCALAPPDATA%\Rendl\history folder). When the in-session history has
+  // nothing left to undo (content equals the baseline), Ctrl+Z steps back
+  // through the persisted snapshots. Ctrl+Y walks forward again.
 
-  const history = { stack: [], index: -1, baseline: '' };
+  async function initHistory(tab) {
+    tab.history = { stack: [], index: -1, baseline: getMarkdown(), pending: false };
+    if (!tab.filePath) return;
 
-  async function initHistory(filePath) {
-    history.stack = [];
-    history.index = -1;
-    history.baseline = getMarkdown();
-    if (!filePath) return;
-
-    const entries = await api.historyGet(filePath);
+    const entries = await api.historyGet(tab.filePath);
+    if (tab.id !== activeTabId) { tab.history.pending = true; return; } // switched away meanwhile
     const current = getMarkdown();
-    history.stack = entries;
-    if (history.stack.length === 0 || history.stack[history.stack.length - 1] !== current) {
-      history.stack.push(current);
-      api.historySave(filePath, history.stack);
+    tab.history.stack = entries;
+    if (tab.history.stack.length === 0 || tab.history.stack[tab.history.stack.length - 1] !== current) {
+      tab.history.stack.push(current);
+      api.historySave(tab.filePath, tab.history.stack);
     }
-    history.index = history.stack.length - 1;
+    tab.history.index = tab.history.stack.length - 1;
   }
 
-  function recordHistory(content) {
-    if (!state.filePath) return;
+  function recordHistory(tab, content) {
+    if (!tab || !tab.filePath || tab.history.pending) return;
+    const history = tab.history;
     if (history.stack[history.index] === content) return; // e.g. after a snapshot undo
     history.stack = history.stack.slice(0, history.index + 1);
     if (history.stack[history.stack.length - 1] !== content) history.stack.push(content);
     history.index = history.stack.length - 1;
-    api.historySave(state.filePath, history.stack);
+    api.historySave(tab.filePath, history.stack);
   }
 
   function tryHistoryStep(direction) {
-    if (!state.filePath) return false;
-    if (getMarkdown() !== history.baseline) return false; // session history is still active
-    const target = history.index + direction;
-    if (target < 0 || target >= history.stack.length) return false;
+    const tab = activeTab();
+    if (!tab || !tab.filePath || tab.history.pending) return false;
+    if (getMarkdown() !== tab.history.baseline) return false; // session history is still active
+    const target = tab.history.index + direction;
+    if (target < 0 || target >= tab.history.stack.length) return false;
 
     loadingDocument = true;
-    editor.setMarkdown(history.stack[target], false);
+    editor.setMarkdown(tab.history.stack[target], false);
     loadingDocument = false;
-    history.index = target;
-    history.baseline = getMarkdown();
+    tab.history.index = target;
+    tab.history.baseline = getMarkdown();
     updateDocumentChrome();
     updateStatistics();
     scheduleAutosave();
@@ -263,96 +432,180 @@
   }
 
   function scheduleAutosave() {
-    if (!state.filePath) return; // An untitled document is saved via Ctrl+S first.
+    const tab = activeTab();
+    if (!tab || !tab.filePath) return; // An untitled document is saved via Ctrl+S first.
     clearTimeout(autosaveTimer);
     autosaveTimer = setTimeout(() => {
-      if (state.filePath && isDirty()) saveDocument({ silent: true });
+      const current = activeTab();
+      if (current && current.filePath && isTabDirty(current)) saveTab(current, { silent: true });
     }, AUTOSAVE_DELAY_MS);
-  }
-
-  // ---------- guarded destructive actions ----------
-
-  async function confirmDiscardIfDirty() {
-    if (!isDirty()) return true;
-    // With autosave, only untitled documents can still hold unsaved work.
-    if (state.filePath) return (await saveDocument({ silent: true }));
-    const choice = await api.confirmDiscard({
-      documentName: state.fileName || t('app.untitled'),
-    });
-    if (choice === 'cancel') return false;
-    if (choice === 'save') return saveDocument();
-    return true; // discard
   }
 
   // ---------- file actions ----------
 
-  async function newDocument() {
-    if (!(await confirmDiscardIfDirty())) return;
-    api.unwatchFile();
-    setDocument({ content: '' });
-  }
-
-  async function openDocumentDialog() {
-    if (!(await confirmDiscardIfDirty())) return;
+  async function saveTab(tab, { silent = false } = {}) {
+    if (!tab) return false;
     try {
-      const result = await api.openFileDialog();
-      if (result) {
-        setDocument(result);
+      if (tab.filePath) {
+        const markdown = tab.id === activeTabId ? getMarkdown() : tab.content;
+        const result = await api.saveFile(tab.filePath, serializeTabContent(tab, markdown));
+        tab.savedContent = markdown;
+        tab.content = markdown;
+        recordHistory(tab, markdown);
         renderRecentList(result.recent);
-      }
-    } catch {
-      showToast(t('error.openFailed.message'));
-    }
-  }
-
-  async function openPath(filePath) {
-    if (!(await confirmDiscardIfDirty())) return;
-    try {
-      const result = await api.readFile(filePath);
-      setDocument(result);
-      renderRecentList(result.recent);
-    } catch {
-      showToast(t('error.openFailed.message'));
-      refreshRecentList();
-    }
-  }
-
-  async function saveDocument({ silent = false } = {}) {
-    try {
-      if (state.filePath) {
-        const markdown = getMarkdown();
-        const result = await api.saveFile(state.filePath, serializeContent(markdown));
-        state.savedContent = markdown;
-        recordHistory(markdown);
-        renderRecentList(result.recent);
+        renderTabs();
         updateDocumentChrome();
         if (!silent) showToast(t('toast.saved', { name: result.name }));
         return true;
       }
-      return saveDocumentAs();
+      return saveTabAs(tab);
     } catch {
       showToast(t('error.saveFailed.message'));
       return false;
     }
   }
 
-  async function saveDocumentAs() {
+  async function saveTabAs(tab) {
+    if (!tab) return false;
     try {
-      const markdown = getMarkdown();
-      const result = await api.saveFileDialog(serializeContent(markdown), state.fileName || 'naamloos.md');
+      const markdown = tab.id === activeTabId ? getMarkdown() : tab.content;
+      const result = await api.saveFileDialog(serializeTabContent(tab, markdown), tab.fileName || 'naamloos.md');
       if (!result) return false;
-      state.filePath = result.path;
-      state.fileName = result.name;
-      state.savedContent = markdown;
-      await initHistory(result.path);
+      tab.filePath = result.path;
+      tab.fileName = result.name;
+      tab.savedContent = markdown;
+      tab.content = markdown;
+      tab.history.pending = true;
+      if (tab.id === activeTabId) await initHistory(tab);
       renderRecentList(result.recent);
+      renderTabs();
+      updateWatchedFiles();
       updateDocumentChrome();
+      persistSession();
       showToast(t('toast.saved', { name: result.name }));
       return true;
     } catch {
       showToast(t('error.saveFailed.message'));
       return false;
     }
+  }
+
+  async function openDocumentDialog() {
+    try {
+      const result = await api.openFileDialog();
+      if (!result) return;
+      const existing = tabs.find((tab) => tab.filePath === result.path);
+      if (existing) { activateTab(existing.id); return; }
+      const tab = makeTab(result);
+      tabs.push(tab);
+      renderRecentList(result.recent);
+      renderTabs();
+      updateWatchedFiles();
+      activateTab(tab.id);
+    } catch {
+      showToast(t('error.openFailed.message'));
+    }
+  }
+
+  // Saves every document; untitled dirty tabs get the keep/discard dialog.
+  // Returns false when the user cancels.
+  async function ensureAllTabsSettled() {
+    syncActiveIntoTab();
+    for (const tab of [...tabs]) {
+      if (!isTabDirty(tab)) continue;
+      if (tab.filePath) {
+        if (!(await saveTab(tab, { silent: true }))) return false;
+      } else {
+        if (tab.id !== activeTabId) activateTab(tab.id);
+        const choice = await api.confirmDiscard({ documentName: tab.fileName || t('app.untitled') });
+        if (choice === 'cancel') return false;
+        if (choice === 'save' && !(await saveTabAs(tab))) return false;
+      }
+    }
+    return true;
+  }
+
+  // ---------- project ----------
+
+  function renderProjectList() {
+    const project = state.project;
+    elements.projectName.textContent = project ? project.name : t('sidebar.project');
+    elements.projectList.innerHTML = '';
+
+    if (!project) {
+      elements.projectEmpty.textContent = t('project.none');
+      elements.projectEmpty.hidden = false;
+      return;
+    }
+    if (project.files.length === 0) {
+      elements.projectEmpty.textContent = t('project.empty');
+      elements.projectEmpty.hidden = false;
+      return;
+    }
+    elements.projectEmpty.hidden = true;
+
+    const active = activeTab();
+    let currentFolder = null;
+    for (const file of project.files) {
+      const separator = file.relative.includes('\\') ? '\\' : '/';
+      const parts = file.relative.split(/[\\/]/);
+      const folder = parts.length > 1 ? parts.slice(0, -1).join(separator) : '';
+      if (folder !== currentFolder) {
+        currentFolder = folder;
+        if (folder) {
+          const header = document.createElement('li');
+          header.className = 'project-folder';
+          header.textContent = folder;
+          header.title = folder;
+          elements.projectList.appendChild(header);
+        }
+      }
+
+      const item = document.createElement('li');
+      const button = document.createElement('button');
+      button.className = 'project-item';
+      if (active && active.filePath === file.path) button.classList.add('is-current');
+      button.textContent = parts[parts.length - 1];
+      button.title = file.path;
+      button.addEventListener('click', () => openInTab(file.path));
+      item.appendChild(button);
+      elements.projectList.appendChild(item);
+    }
+  }
+
+  async function openProjectDialog() {
+    const project = await api.openFolderDialog();
+    if (!project) return;
+    state.project = project;
+    localStorage.setItem('projectPath', project.root);
+    applySidebarView('project');
+    renderProjectList();
+  }
+
+  async function restoreProject() {
+    const saved = localStorage.getItem('projectPath');
+    if (!saved) return;
+    const project = await api.scanProject(saved);
+    if (project) state.project = project;
+    renderProjectList();
+  }
+
+  async function refreshProject() {
+    if (!state.project) return;
+    const project = await api.scanProject(state.project.root);
+    if (project) state.project = project;
+    renderProjectList();
+  }
+
+  function applySidebarView(view, { animate = true } = {}) {
+    state.sidebarView = view;
+    localStorage.setItem('sidebarView', view);
+    elements.viewProject.hidden = view !== 'project';
+    elements.viewRecent.hidden = view !== 'recent';
+    for (const item of elements.sidebarSwitch.querySelectorAll('.segmented-item')) {
+      item.classList.toggle('is-active', item.dataset.view === view);
+    }
+    positionThumb(elements.sidebarSwitch, elements.sidebarThumb, animate);
   }
 
   // ---------- recent files ----------
@@ -362,11 +615,12 @@
     elements.recentList.innerHTML = '';
     elements.recentEmpty.hidden = list.length > 0;
 
+    const active = activeTab();
     for (const filePath of list) {
       const item = document.createElement('li');
       const button = document.createElement('button');
       button.className = 'recent-item';
-      if (filePath === state.filePath) button.classList.add('is-current');
+      if (active && filePath === active.filePath) button.classList.add('is-current');
 
       const name = document.createElement('span');
       name.className = 'recent-item-name';
@@ -378,7 +632,7 @@
       pathLabel.title = filePath;
 
       button.append(name, pathLabel);
-      button.addEventListener('click', () => openPath(filePath));
+      button.addEventListener('click', () => openInTab(filePath));
       item.appendChild(button);
       elements.recentList.appendChild(item);
     }
@@ -400,17 +654,27 @@
 
   function toggleSidebar() {
     elements.sidebar.hidden = !elements.sidebar.hidden;
-    if (!elements.sidebar.hidden) refreshRecentList();
+    if (!elements.sidebar.hidden) {
+      refreshRecentList();
+      refreshProject();
+      applySidebarView(state.sidebarView, { animate: false });
+    }
   }
 
   // ---------- event wiring ----------
 
-  $('#btn-new').addEventListener('click', newDocument);
+  $('#btn-new').addEventListener('click', newTab);
+  $('#btn-new-tab').addEventListener('click', newTab);
   $('#btn-open').addEventListener('click', openDocumentDialog);
-  $('#btn-save').addEventListener('click', () => saveDocument());
+  $('#btn-save').addEventListener('click', () => saveTab(activeTab()));
   $('#btn-sidebar').addEventListener('click', toggleSidebar);
   $('#btn-theme').addEventListener('click', cycleTheme);
   $('#btn-clear-recent').addEventListener('click', async () => renderRecentList(await api.clearRecentFiles()));
+  $('#btn-open-project').addEventListener('click', openProjectDialog);
+
+  for (const item of elements.sidebarSwitch.querySelectorAll('.segmented-item')) {
+    item.addEventListener('click', () => applySidebarView(item.dataset.view));
+  }
 
   const installButton = $('#btn-install');
   installButton.addEventListener('click', async () => {
@@ -424,8 +688,8 @@
     updateButton.hidden = false;
   });
   updateButton.addEventListener('click', async () => {
-    // An untitled document with changes would be lost by the restart.
-    if (!state.filePath && isDirty() && !(await confirmDiscardIfDirty())) return;
+    // Unsaved untitled documents would be lost by the restart.
+    if (!(await ensureAllTabsSettled())) return;
     updateButton.disabled = true;
     updateButton.textContent = t('update.downloading');
     const started = await api.installUpdate();
@@ -454,10 +718,12 @@
       if (tryHistoryStep(1)) { event.preventDefault(); event.stopPropagation(); }
       return;
     }
-    if (key === 'n') { event.preventDefault(); newDocument(); }
+    if (key === 'n' || key === 't') { event.preventDefault(); newTab(); }
     else if (key === 'o') { event.preventDefault(); openDocumentDialog(); }
-    else if (key === 's' && event.shiftKey) { event.preventDefault(); saveDocumentAs(); }
-    else if (key === 's') { event.preventDefault(); saveDocument(); }
+    else if (key === 'w') { event.preventDefault(); const tab = activeTab(); if (tab) closeTab(tab.id); }
+    else if (key === 'tab') { event.preventDefault(); cycleTab(event.shiftKey ? -1 : 1); }
+    else if (key === 's' && event.shiftKey) { event.preventDefault(); saveTabAs(activeTab()); }
+    else if (key === 's') { event.preventDefault(); saveTab(activeTab()); }
     else if (key === 'e') {
       event.preventDefault();
       applyEditorMode(state.editorMode === 'markdown' ? 'wysiwyg' : 'markdown');
@@ -476,50 +742,65 @@
   }, true);
   window.addEventListener('drop', (event) => {
     elements.dropIndicator.hidden = true;
-    const file = event.dataTransfer && event.dataTransfer.files[0];
-    if (!file) return;
-    const filePath = api.getPathForFile(file);
-    if (filePath && /\.(md|markdown|mdown|txt)$/i.test(filePath)) {
-      event.preventDefault();
-      event.stopPropagation();
-      openPath(filePath);
-    }
+    const files = event.dataTransfer ? [...event.dataTransfer.files] : [];
+    const paths = files.map((file) => api.getPathForFile(file))
+      .filter((filePath) => filePath && /\.(md|markdown|mdown|txt)$/i.test(filePath));
+    if (paths.length === 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    (async () => {
+      for (const filePath of paths) await openInTab(filePath);
+    })();
   }, true);
 
-  window.addEventListener('resize', () => positionSegmentedThumb(false));
-
-  // Close flow: the main process asks us for the current dirty state.
-  api.onCloseRequested(() => {
-    api.confirmClose({
-      dirty: isDirty(),
-      documentName: state.fileName || t('app.untitled'),
-      filePath: state.filePath,
-      content: serializeContent(getMarkdown()),
-    });
+  window.addEventListener('resize', () => {
+    positionThumb(elements.modeSwitch, elements.segmentedThumb, false);
+    if (!elements.sidebar.hidden) positionThumb(elements.sidebarSwitch, elements.sidebarThumb, false);
   });
 
-  api.onOpenExternalFile((filePath) => openPath(filePath));
+  // Close flow: settle every tab first, then let the main process close us.
+  api.onCloseRequested(async () => {
+    if (!(await ensureAllTabsSettled())) return; // user cancelled
+    api.confirmClose({ dirty: false, documentName: '', filePath: null, content: '' });
+  });
 
-  // Live reload: the main process pushes the newest content when the open
+  api.onOpenExternalFile((filePath) => openInTab(filePath));
+
+  // Live reload: the main process pushes the newest content when an open
   // file changes on disk. Our own (auto)saves arrive here too, but match
   // the current content and are absorbed silently.
   api.onFileChangedOnDisk(({ path, content }) => {
-    if (path !== state.filePath) return;
+    const tab = tabs.find((entry) => entry.filePath === path);
+    if (!tab) return;
     const normalized = normalizeContent(content);
-    if (normalized === state.savedContent || normalized === getMarkdown()) {
-      state.savedContent = getMarkdown();
+
+    if (tab.id !== activeTabId) {
+      // Background tab: adopt the disk state unless it has unsaved changes.
+      if (!isTabDirty(tab)) {
+        tab.eol = detectEol(content);
+        tab.content = normalized;
+        tab.savedContent = normalized;
+        tab.needsBaseline = true;
+        tab.history.pending = true;
+      }
+      return;
+    }
+
+    if (normalized === tab.savedContent || normalized === getMarkdown()) {
+      tab.savedContent = getMarkdown();
       updateDocumentChrome();
       return;
     }
 
     const scrollTop = editor.getScrollTop();
     loadingDocument = true;
-    state.eol = detectEol(content);
+    tab.eol = detectEol(content);
     editor.setMarkdown(normalized, false);
-    state.savedContent = getMarkdown();
+    tab.savedContent = getMarkdown();
+    tab.content = tab.savedContent;
     loadingDocument = false;
-    history.baseline = getMarkdown();
-    recordHistory(history.baseline);
+    tab.history.baseline = getMarkdown();
+    recordHistory(tab, tab.history.baseline);
     updateDocumentChrome();
     updateStatistics();
     editor.setScrollTop(scrollTop);
@@ -538,20 +819,38 @@
   state.systemTheme = await api.getSystemTheme();
   applyTheme();
   applyEditorMode(state.editorMode, { animate: false });
-  updateDocumentChrome();
-  updateStatistics();
   refreshRecentList();
+  restoreProject();
+
+  // Restore the previous session's tabs, then any file passed on startup.
+  let restoredPaths = [];
+  try { restoredPaths = JSON.parse(localStorage.getItem('openTabs') || '[]'); } catch { /* fresh start */ }
+  for (const filePath of restoredPaths) {
+    await openInTab(filePath, { background: true });
+  }
 
   const startupFile = await api.getStartupFile();
   if (startupFile) {
-    await openPath(startupFile);
-  } else if (api.demoContent) {
-    setDocument({ name: 'voorbeeld.md', content: api.demoContent });
-  } else {
-    editor.focus();
+    await openInTab(startupFile);
+  } else if (tabs.length > 0) {
+    const preferred = tabs.find((tab) => tab.filePath === localStorage.getItem('activeTabPath'));
+    activateTab((preferred || tabs[0]).id, { focus: false });
   }
 
-  positionSegmentedThumb(false);
+  if (tabs.length === 0) {
+    if (api.demoContent) {
+      const tab = makeTab({ name: 'voorbeeld.md', content: api.demoContent });
+      tabs.push(tab);
+      activateTab(tab.id, { focus: false });
+    } else {
+      newTab();
+    }
+  }
+
+  renderTabs();
+  updateDocumentChrome();
+  updateStatistics();
+  positionThumb(elements.modeSwitch, elements.segmentedThumb, false);
 
   // ---------- browser demo fallback ----------
   // Lets the UI run in a plain browser (no Electron preload) during development.
@@ -572,10 +871,10 @@
         '## Mogelijkheden\n',
         '- Volwaardige opmaakwerkbalk boven de editor',
         '- Live (WYSIWYG) en opmaakweergave',
-        '- Automatisch opslaan, zoals in Google Docs\n',
+        '- Projecten, tabbladen en automatisch opslaan\n',
         '> Dit is een voorbeelddocument in de browserdemo.\n',
         '```js\nfunction greet(name) {\n  return `Hallo, ${name}!`;\n}\n```\n',
-        '| Sneltoets | Actie |\n| --- | --- |\n| Ctrl+S | Opslaan |\n| Ctrl+E | Weergave wisselen |\n',
+        '| Sneltoets | Actie |\n| --- | --- |\n| Ctrl+S | Opslaan |\n| Ctrl+W | Tabblad sluiten |\n',
         '- [x] Ontwerp\n- [ ] Vertalingen\n',
       ].join('\n'),
       openFileDialog: async () => null,
@@ -584,8 +883,10 @@
       saveFileDialog: async () => null,
       getStartupFile: async () => null,
       getPathForFile: () => null,
-      unwatchFile: () => {},
+      setWatchedFiles: () => {},
       onFileChangedOnDisk: () => {},
+      openFolderDialog: async () => null,
+      scanProject: async () => null,
       listRecentFiles: async () => [],
       clearRecentFiles: async () => [],
       getSystemTheme: async () => (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'),

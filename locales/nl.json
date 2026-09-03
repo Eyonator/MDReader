@@ -16,9 +16,19 @@
   "theme.dark": "Donker",
   "theme.auto": "Automatisch",
 
-  "sidebar.title": "Recent",
+  "sidebar.project": "Project",
+  "sidebar.recent": "Recent",
   "sidebar.empty": "Nog geen recente bestanden.\nOpen een bestand om te beginnen.",
   "sidebar.clear": "Lijst wissen",
+
+  "project.open": "Map openen…",
+  "project.refresh": "Vernieuwen",
+  "project.empty": "Geen Markdown-bestanden gevonden in deze map.",
+  "project.none": "Open een map als project — alle Markdown-bestanden daarin verschijnen hier.",
+  "dialog.openFolder.title": "Projectmap openen",
+
+  "tabs.close": "Tabblad sluiten",
+  "tabs.new": "Nieuw tabblad",
 
   "editor.placeholder": "Begin met schrijven… Markdown wordt live weergegeven in de leesweergave.",
 

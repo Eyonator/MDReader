@@ -15,8 +15,12 @@ contextBridge.exposeInMainWorld('rendl', {
   saveFileDialog: (content, suggestedName) => ipcRenderer.invoke('file:save-dialog', content, suggestedName),
   getStartupFile: () => ipcRenderer.invoke('app:startup-file'),
   getPathForFile: (file) => webUtils.getPathForFile(file),
-  unwatchFile: () => ipcRenderer.invoke('file:unwatch'),
+  setWatchedFiles: (filePaths) => ipcRenderer.invoke('watch:set', filePaths),
   onFileChangedOnDisk: (callback) => ipcRenderer.on('file:changed-on-disk', (_event, payload) => callback(payload)),
+
+  // Projects (a folder of Markdown files).
+  openFolderDialog: () => ipcRenderer.invoke('project:open-dialog'),
+  scanProject: (dirPath) => ipcRenderer.invoke('project:scan', dirPath),
 
   // Recent files.
   listRecentFiles: () => ipcRenderer.invoke('recent:list'),

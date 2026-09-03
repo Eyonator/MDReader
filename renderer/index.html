@@ -60,15 +60,38 @@
 
     <div class="workspace">
       <aside class="sidebar glass" id="sidebar" hidden>
-        <div class="sidebar-header">
-          <h2 data-i18n="sidebar.title"></h2>
-          <button class="text-button" id="btn-clear-recent" data-i18n="sidebar.clear"></button>
+        <div class="segmented segmented-small" id="sidebar-switch" role="tablist">
+          <div class="segmented-thumb" id="sidebar-thumb"></div>
+          <button class="segmented-item" role="tab" data-view="project" data-i18n="sidebar.project"></button>
+          <button class="segmented-item" role="tab" data-view="recent" data-i18n="sidebar.recent"></button>
         </div>
-        <ul class="recent-list" id="recent-list"></ul>
-        <p class="recent-empty" id="recent-empty" data-i18n="sidebar.empty" hidden></p>
+
+        <div class="sidebar-view" id="view-project" hidden>
+          <div class="sidebar-header">
+            <h2 id="project-name"></h2>
+            <button class="text-button" id="btn-open-project" data-i18n="project.open"></button>
+          </div>
+          <ul class="project-list" id="project-list"></ul>
+          <p class="recent-empty" id="project-empty" hidden></p>
+        </div>
+
+        <div class="sidebar-view" id="view-recent" hidden>
+          <div class="sidebar-header">
+            <h2 data-i18n="sidebar.recent"></h2>
+            <button class="text-button" id="btn-clear-recent" data-i18n="sidebar.clear"></button>
+          </div>
+          <ul class="recent-list" id="recent-list"></ul>
+          <p class="recent-empty" id="recent-empty" data-i18n="sidebar.empty" hidden></p>
+        </div>
       </aside>
 
       <main class="editor-shell glass">
+        <div class="tabbar" id="tabbar">
+          <div class="tabbar-tabs" id="tabbar-tabs"></div>
+          <button class="icon-button tabbar-new" id="btn-new-tab" data-i18n-title="tabs.new" title="">
+            <svg viewBox="0 0 20 20"><path d="M10 4.5v11M4.5 10h11" /></svg>
+          </button>
+        </div>
         <div id="editor-root"></div>
       </main>
     </div>
