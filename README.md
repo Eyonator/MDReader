@@ -18,6 +18,17 @@ npm install   # installeert dependencies en bouwt de editorbundel
 npm start     # start de app
 ```
 
+## Uitleveren (.exe)
+
+```bash
+npm run dist
+```
+
+Dit bouwt twee bestanden in `dist/`:
+
+- **`MDLezer-Portable-<versie>.exe`** — portable: geen installatie nodig, direct te starten (ook vanaf een USB-stick)
+- **`MDLezer-Setup-<versie>.exe`** — installer: installeert de app én koppelt `.md`, `.markdown` en `.mdown` aan MD Lezer, zodat dubbelklikken op een Markdown-bestand de app opent
+
 ## Structuur
 
 - `main.js` — Electron-hoofdproces (vensters, dialogen, bestands-I/O, file watcher)

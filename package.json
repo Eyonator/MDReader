@@ -6,18 +6,68 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "build:editor": "esbuild build/editor-entry.js --bundle --minify --format=iife --outfile=renderer/vendor/toastui-bundle.js",
-    "postinstall": "npm run build:editor"
+    "build:editor": "esbuild build/editor-entry.js build/editor-styles.css --bundle --minify --format=iife --outdir=renderer/vendor",
+    "postinstall": "npm run build:editor",
+    "dist": "npm run build:editor && electron-builder --win"
   },
   "author": "Vincent van Soelen",
   "license": "MIT",
   "devDependencies": {
+    "@toast-ui/editor": "^3.2.2",
+    "@toast-ui/editor-plugin-code-syntax-highlight": "^3.1.0",
     "electron": "^41.7.1",
+    "electron-builder": "^24.13.3",
     "esbuild": "^0.28.2",
     "ws": "^8.21.3"
   },
-  "dependencies": {
-    "@toast-ui/editor": "^3.2.2",
-    "@toast-ui/editor-plugin-code-syntax-highlight": "^3.1.0"
+  "build": {
+    "appId": "nl.vansoelen.mdlezer",
+    "productName": "MD Lezer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**",
+      "locales/**"
+    ],
+    "fileAssociations": [
+      {
+        "ext": "md",
+        "name": "Markdown",
+        "description": "Markdown-bestand",
+        "role": "Editor"
+      },
+      {
+        "ext": "markdown",
+        "name": "Markdown",
+        "description": "Markdown-bestand",
+        "role": "Editor"
+      },
+      {
+        "ext": "mdown",
+        "name": "Markdown",
+        "description": "Markdown-bestand",
+        "role": "Editor"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        "portable",
+        "nsis"
+      ]
+    },
+    "portable": {
+      "artifactName": "MDLezer-Portable-${version}.exe"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "perMachine": false,
+      "artifactName": "MDLezer-Setup-${version}.exe",
+      "shortcutName": "MD Lezer"
+    }
   }
 }
