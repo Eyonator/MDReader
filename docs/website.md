@@ -18,7 +18,7 @@ Een **one-pager** die Rendl presenteert en distribueert:
 | Vraag | Besluit |
 | ----- | ------- |
 | Domeinnaam | **rendl.app** — geregistreerd op 2026-09-03 (Openprovider), nameservers ns1–ns3.sinius.nl |
-| Website-repo | **rendl-site** (eigen privé repo, Fundament als submodule) |
+| Website-repo | **rendl-site** — bestaat al als privé repo; Fundament komt erin als submodule |
 | Prijsvorm | **Abonnement** (bedrag en interval nog open) |
 | PSP | **Stripe** (Checkout + Billing + customer portal + webhooks) |
 | Pro-features | **Export (PDF/HTML/Word)** en **synchronisatie**; lijst blijft open voor meer. Tabs/split view zijn sinds v1.3.0 gratis uitgebracht en gaan niet met terugwerkende kracht achter de betaalmuur. |
@@ -42,7 +42,7 @@ Fundament is de herbruikbare projectbasis van HTM: accounts (2FA, passkeys), beh
 
 Zo start het websiteproject straks (samengevat uit `START.md` van Fundament — dat document is bij de bouw leidend, stap voor stap):
 
-1. **Eigen, nieuwe, privé repo** voor de website: **rendl-site** (nooit bouwen in de Fundament-repo zelf); Fundament hangt erin als **git-submodule** op `app/Fundament`, vastgezet op de nieuwste release-tag.
+1. De privé repo **rendl-site** bestaat al (nooit bouwen in de Fundament-repo zelf); Fundament hangt erin als **git-submodule** op `app/Fundament`, vastgezet op de nieuwste release-tag.
 2. `skelet/` eenmalig naar de projectroot kopiëren (daarna projectbezit): `public_html/`, `app/` (bootstrap, routes, functions, config, views), `dev-router.php`, `cron/`, `dev/update-fundament.sh`.
 3. `secret/.env` invullen: `APP_KEY`, `ADMIN_KEY`, `KOPPEL_KEY`, `DB_*`, `APP_URL`; database utf8mb4 + `schema/001-fundament.sql`.
 4. Smoke draaien (`dev/check-fundament.sh`) tot **ALLES GROEN**, daarna schoon opleveren volgens START.md §3.
