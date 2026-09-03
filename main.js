@@ -225,8 +225,15 @@ async function startUpdateDownload() {
     `echo relaunched >> "${chainLog}"`,
     '',
   ].join('\r\n'));
+  // windowsHide is ignored for detached processes, so a directly spawned
+  // cmd shows a console window during the update. wscript is a GUI-subsystem
+  // binary and runs the script with window style 0: fully invisible.
+  const chainLauncher = path.join(app.getPath('temp'), 'rendl-update.vbs');
+  fs.writeFileSync(chainLauncher,
+    `CreateObject("Wscript.Shell").Run """${chainScript}""", 0, False\r\n`);
+
   fs.writeFileSync(chainLog, 'spawning chain script\n');
-  const chainChild = spawn('cmd.exe', ['/c', chainScript], {
+  const chainChild = spawn('wscript.exe', [chainLauncher], {
     detached: true,
     stdio: 'ignore',
     windowsHide: true,
