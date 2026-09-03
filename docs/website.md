@@ -1,7 +1,6 @@
 # Rendl-website — plan & documentatie
 
-> Status: **documentatie, er wordt nog niets gebouwd.**
-> Doel: één centrale plek voor alles wat de website straks moet worden en doen.
+> Status: **in uitvoering** — de bouw is gestart in de privé repo **rendl-site** (0.0.1.0, branch `staging`): Fundament-submodule v0.33.2, skelet, smoke 208/209 groen, werkwijze-structuur. De actuele bouwstatus leeft dáár (HANDOFF.md/todo.md); dit document blijft de plek voor het productplan en de app-koppeling.
 > Besluitenronde 2026-09-04: domein, repo, prijsmodel, PSP, modules, platforms en activatiebeleid vastgelegd (zie "Besluiten").
 
 ## Doel van de site
