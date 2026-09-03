@@ -55,6 +55,19 @@
   "toast.saved": "Opgeslagen als {name}",
   "toast.reloaded": "Bijgewerkt vanaf schijf",
 
+  "toolbar.install": "Installeren",
+  "install.confirm.title": "Rendl installeren",
+  "install.confirm.message": "Rendl installeren voor deze gebruiker?",
+  "install.confirm.detail": "Rendl wordt geïnstalleerd in {dir}, verschijnt in je startmenu en koppelt .md-bestanden aan Rendl. Er zijn geen beheerdersrechten nodig.",
+  "install.confirm.checkbox": "Ook de AI-agent-skill installeren (Claude Code, Codex)",
+  "install.confirm.ok": "Installeren",
+  "install.confirm.cancel": "Annuleren",
+  "install.done.title": "Geïnstalleerd",
+  "install.done.message": "Rendl is geïnstalleerd.",
+  "install.done.detail": "Je vindt Rendl in het startmenu. Deze portable versie kun je blijven gebruiken of weggooien.",
+  "install.failed.title": "Installeren mislukt",
+  "install.failed.message": "Rendl kon niet worden geïnstalleerd.",
+
   "toastui": {
     "Markdown": "Markdown",
     "WYSIWYG": "WYSIWYG",

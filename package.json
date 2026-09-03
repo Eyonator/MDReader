@@ -30,7 +30,8 @@
       "main.js",
       "preload.js",
       "renderer/**",
-      "locales/**"
+      "locales/**",
+      "resources/**"
     ],
     "fileAssociations": [
       {
@@ -55,19 +56,39 @@
     "win": {
       "icon": "build/icon.ico",
       "target": [
-        "portable",
-        "nsis"
+        "portable"
       ]
     },
     "portable": {
-      "artifactName": "Rendl-Portable-${version}.exe"
+      "artifactName": "Rendl-${version}-win.exe"
     },
-    "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
-      "perMachine": false,
-      "artifactName": "Rendl-Setup-${version}.exe",
-      "shortcutName": "Rendl"
+    "mac": {
+      "category": "public.app-category.productivity",
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "universal"
+          ]
+        }
+      ],
+      "artifactName": "Rendl-${version}-mac.${ext}"
+    },
+    "linux": {
+      "icon": "build/icon.png",
+      "category": "Office",
+      "executableName": "rendl",
+      "synopsis": "Markdown reader & writer",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Rendl-${version}-linux.${ext}"
     }
   }
 }

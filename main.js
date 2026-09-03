@@ -4,6 +4,8 @@ const { app, BrowserWindow, ipcMain, dialog, nativeTheme, shell } = require('ele
 const path = require('path');
 const fs = require('fs');
 const fsp = require('fs/promises');
+const { execFileSync, spawn } = require('child_process');
+const crypto = require('crypto');
 
 const strings = require('./locales/nl.json');
 
@@ -103,6 +105,240 @@ function watchFile(filePath) {
       // The file may be mid-write or deleted; the next poll will retry.
     }
   });
+}
+
+// --- Persistent per-document history --------------------------------------
+// Snapshots of every saved state, kept in a hidden folder under
+// %LOCALAPPDATA%\Rendl\history, so Ctrl+Z can step back into previous
+// sessions after the app was closed and the same document is reopened.
+
+const HISTORY_MAX_ENTRIES = 50;
+const HISTORY_MAX_BYTES = 10 * 1024 * 1024;
+
+function historyBaseDir() {
+  return path.join(process.env.LOCALAPPDATA || app.getPath('userData'), 'Rendl');
+}
+
+async function ensureHistoryDir() {
+  const base = historyBaseDir();
+  const dir = path.join(base, 'history');
+  if (!fs.existsSync(dir)) {
+    await fsp.mkdir(dir, { recursive: true });
+    if (process.platform === 'win32') {
+      try {
+        execFileSync('attrib', ['+h', base], { windowsHide: true });
+      } catch { /* hidden attribute is cosmetic */ }
+    }
+  }
+  return dir;
+}
+
+async function historyFilePath(documentPath) {
+  const dir = await ensureHistoryDir();
+  const hash = crypto.createHash('sha1').update(documentPath.toLowerCase()).digest('hex');
+  return path.join(dir, `${hash}.json`);
+}
+
+ipcMain.handle('history:get', async (_event, documentPath) => {
+  try {
+    const raw = await fsp.readFile(await historyFilePath(documentPath), 'utf8');
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed.entries) ? parsed.entries.map((e) => String(e.c)) : [];
+  } catch {
+    return [];
+  }
+});
+
+ipcMain.handle('history:save', async (_event, documentPath, entries) => {
+  if (!Array.isArray(entries)) return;
+  let list = entries.map((c) => String(c)).slice(-HISTORY_MAX_ENTRIES);
+  let totalBytes = list.reduce((sum, c) => sum + c.length, 0);
+  while (list.length > 1 && totalBytes > HISTORY_MAX_BYTES) {
+    totalBytes -= list[0].length;
+    list = list.slice(1);
+  }
+  const payload = { path: documentPath, entries: list.map((c) => ({ t: Date.now(), c })) };
+  await fsp.writeFile(await historyFilePath(documentPath), JSON.stringify(payload), 'utf8');
+});
+
+// --- In-app installation (Windows, per-user, no admin required) -----------
+// The single distributed exe runs portable; from inside the app the user can
+// install it permanently: files under %LOCALAPPDATA%\Programs\Rendl, a Start
+// Menu shortcut, .md associations and an uninstall entry — all under HKCU.
+
+const INSTALL_DIR = process.platform === 'win32'
+  ? path.join(process.env.LOCALAPPDATA || '', 'Programs', 'Rendl')
+  : null;
+const PROG_ID = 'Rendl.Markdown';
+const ASSOC_EXTENSIONS = ['.md', '.markdown', '.mdown'];
+
+function isInstalledCopy() {
+  return !!INSTALL_DIR && process.execPath.toLowerCase().startsWith(INSTALL_DIR.toLowerCase() + path.sep);
+}
+
+function canInstall() {
+  return process.platform === 'win32' && !isInstalledCopy() && !!process.env.LOCALAPPDATA;
+}
+
+function regAdd(keyPath, valueName, data) {
+  const args = ['add', keyPath, ...(valueName ? ['/v', valueName] : ['/ve']), '/t', 'REG_SZ', '/d', data, '/f'];
+  execFileSync('reg', args, { windowsHide: true });
+}
+
+async function performInstall() {
+  const installedExe = path.join(INSTALL_DIR, 'Rendl.exe');
+  const sourceDir = path.dirname(process.execPath); // unpacked app directory
+
+  // Disable Electron's asar virtualisation while copying, so app.asar is
+  // treated as a plain file instead of a directory.
+  process.noAsar = true;
+  try {
+    await fsp.rm(INSTALL_DIR, { recursive: true, force: true });
+    await fsp.cp(sourceDir, INSTALL_DIR, { recursive: true });
+  } finally {
+    process.noAsar = false;
+  }
+
+  // Start Menu shortcut.
+  const startMenuDir = path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs');
+  shell.writeShortcutLink(path.join(startMenuDir, 'Rendl.lnk'), {
+    target: installedExe,
+    description: 'Rendl — Markdown reader & writer',
+  });
+
+  // File type registration. Windows 10+ keeps the user's explicit choice
+  // (UserChoice) authoritative; this makes Rendl available and the default
+  // where the user has not picked another app.
+  const classes = 'HKCU\\Software\\Classes';
+  regAdd(`${classes}\\${PROG_ID}`, null, 'Markdown-bestand');
+  regAdd(`${classes}\\${PROG_ID}\\DefaultIcon`, null, `"${installedExe}",0`);
+  regAdd(`${classes}\\${PROG_ID}\\shell\\open\\command`, null, `"${installedExe}" "%1"`);
+  for (const ext of ASSOC_EXTENSIONS) {
+    regAdd(`${classes}\\${ext}`, null, PROG_ID);
+    regAdd(`${classes}\\${ext}\\OpenWithProgids`, PROG_ID, '');
+  }
+
+  // Uninstall entry (Settings > Apps).
+  const uninstallKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Rendl';
+  regAdd(uninstallKey, 'DisplayName', 'Rendl');
+  regAdd(uninstallKey, 'DisplayVersion', app.getVersion());
+  regAdd(uninstallKey, 'Publisher', 'Vincent van Soelen');
+  regAdd(uninstallKey, 'DisplayIcon', installedExe);
+  regAdd(uninstallKey, 'InstallLocation', INSTALL_DIR);
+  regAdd(uninstallKey, 'UninstallString', `"${installedExe}" --uninstall`);
+  regAdd(uninstallKey, 'NoModify', '1');
+  regAdd(uninstallKey, 'NoRepair', '1');
+
+  return installedExe;
+}
+
+// --- AI-agent skill (Claude Code, Codex, other agents) --------------------
+// Optional at install time: teaches local AI agents to open Markdown for the
+// user via Rendl (which live-reloads while the agent keeps writing).
+
+const SNIPPET_START = '<!-- rendl-skill:start -->';
+const SNIPPET_END = '<!-- rendl-skill:end -->';
+
+function agentSkillSource(fileName) {
+  return path.join(app.getAppPath(), 'resources', 'agent-skill', fileName);
+}
+
+async function installAgentSkill() {
+  const home = app.getPath('home');
+  const skillContent = await fsp.readFile(agentSkillSource('SKILL.md'), 'utf8');
+  const snippetContent = await fsp.readFile(agentSkillSource('AGENTS-snippet.md'), 'utf8');
+
+  // Claude Code: user-level skill.
+  const claudeSkillDir = path.join(home, '.claude', 'skills', 'rendl');
+  await fsp.mkdir(claudeSkillDir, { recursive: true });
+  await fsp.writeFile(path.join(claudeSkillDir, 'SKILL.md'), skillContent, 'utf8');
+
+  // Codex: add a marked section to the global AGENTS.md (idempotent), but
+  // only when Codex is actually present on this machine.
+  const codexDir = path.join(home, '.codex');
+  if (fs.existsSync(codexDir)) {
+    const agentsPath = path.join(codexDir, 'AGENTS.md');
+    let existing = '';
+    try { existing = await fsp.readFile(agentsPath, 'utf8'); } catch { /* new file */ }
+    const startIndex = existing.indexOf(SNIPPET_START);
+    if (startIndex >= 0) {
+      const endIndex = existing.indexOf(SNIPPET_END);
+      existing = existing.slice(0, startIndex) + existing.slice(endIndex + SNIPPET_END.length).replace(/^\r?\n/, '');
+    }
+    const next = existing.trimEnd() + (existing.trim() ? '\n\n' : '') + snippetContent;
+    await fsp.writeFile(agentsPath, next, 'utf8');
+  }
+
+  // Copy both files next to the installed app for wiring up other agents.
+  if (INSTALL_DIR) {
+    const docsDir = path.join(INSTALL_DIR, 'agent-skill');
+    await fsp.mkdir(docsDir, { recursive: true });
+    await fsp.writeFile(path.join(docsDir, 'SKILL.md'), skillContent, 'utf8');
+    await fsp.writeFile(path.join(docsDir, 'AGENTS-snippet.md'), snippetContent, 'utf8');
+  }
+}
+
+function uninstallAgentSkill() {
+  const home = app.getPath('home');
+  try {
+    fs.rmSync(path.join(home, '.claude', 'skills', 'rendl'), { recursive: true, force: true });
+  } catch { /* not installed */ }
+
+  const agentsPath = path.join(home, '.codex', 'AGENTS.md');
+  try {
+    let existing = fs.readFileSync(agentsPath, 'utf8');
+    const startIndex = existing.indexOf(SNIPPET_START);
+    if (startIndex >= 0) {
+      const endIndex = existing.indexOf(SNIPPET_END);
+      existing = existing.slice(0, startIndex) + existing.slice(endIndex + SNIPPET_END.length).replace(/^\r?\n/, '');
+      fs.writeFileSync(agentsPath, existing, 'utf8');
+    }
+  } catch { /* no AGENTS.md */ }
+}
+
+function performUninstall() {
+  uninstallAgentSkill();
+  const regDelete = (keyPath) => {
+    try {
+      execFileSync('reg', ['delete', keyPath, '/f'], { windowsHide: true });
+    } catch { /* key may not exist */ }
+  };
+
+  const classes = 'HKCU\\Software\\Classes';
+  for (const ext of ASSOC_EXTENSIONS) {
+    // Only remove the extension mapping if it still points to us.
+    try {
+      const current = execFileSync('reg', ['query', `${classes}\\${ext}`, '/ve'], { windowsHide: true }).toString();
+      if (current.includes(PROG_ID)) regDelete(`${classes}\\${ext}`);
+    } catch { /* not registered */ }
+  }
+  regDelete(`${classes}\\${PROG_ID}`);
+  regDelete('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Rendl');
+
+  try {
+    fs.rmSync(path.join(app.getPath('appData'), 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Rendl.lnk'), { force: true });
+  } catch { /* shortcut may not exist */ }
+
+  // The running exe lives inside INSTALL_DIR, so delete the directory from a
+  // detached script after this process has exited — retrying while Windows
+  // still holds locks on the exiting process's files.
+  if (INSTALL_DIR) {
+    const script = [
+      '@echo off',
+      'set /a tries=0',
+      ':loop',
+      'set /a tries+=1',
+      'ping -n 2 127.0.0.1 > nul',
+      `rmdir /s /q "${INSTALL_DIR}" 2> nul`,
+      `if not exist "${INSTALL_DIR}" goto done`,
+      'if %tries% lss 30 goto loop',
+      ':done',
+      'del "%~f0"',
+    ].join('\r\n');
+    const scriptPath = path.join(app.getPath('temp'), 'rendl-uninstall.cmd');
+    fs.writeFileSync(scriptPath, script, 'utf8');
+    spawn('cmd.exe', ['/c', scriptPath], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
+  }
 }
 
 function createMainWindow() {
@@ -226,6 +462,42 @@ ipcMain.handle('app:confirm-discard', async (_event, { documentName }) => {
   return ['save', 'discard', 'cancel'][choice.response];
 });
 
+// --- IPC: in-app installation ---------------------------------------------
+
+ipcMain.handle('app:can-install', () => canInstall());
+
+ipcMain.handle('app:install', async () => {
+  const choice = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    title: t('install.confirm.title'),
+    message: t('install.confirm.message'),
+    detail: t('install.confirm.detail', { dir: INSTALL_DIR }),
+    checkboxLabel: t('install.confirm.checkbox'),
+    checkboxChecked: true,
+    buttons: [t('install.confirm.ok'), t('install.confirm.cancel')],
+    defaultId: 0,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (choice.response !== 0) return false;
+
+  try {
+    await performInstall();
+    if (choice.checkboxChecked) await installAgentSkill();
+    await dialog.showMessageBox(mainWindow, {
+      type: 'info',
+      title: t('install.done.title'),
+      message: t('install.done.message'),
+      detail: t('install.done.detail'),
+      buttons: ['OK'],
+    });
+    return true;
+  } catch (error) {
+    dialog.showErrorBox(t('install.failed.title'), `${t('install.failed.message')}\n${error.message}`);
+    return false;
+  }
+});
+
 // --- IPC: window and theme ------------------------------------------------
 
 ipcMain.handle('window:set-titlebar', (_event, { symbolColor }) => {
@@ -287,7 +559,10 @@ ipcMain.handle('app:confirm-close', async (_event, { dirty, documentName, filePa
 
 // --- App lifecycle --------------------------------------------------------
 
-const hasSingleInstanceLock = app.requestSingleInstanceLock();
+// Maintenance runs (install/uninstall) skip the single-instance lock so they
+// also work while a regular window is open.
+const isMaintenanceRun = process.argv.includes('--uninstall') || process.argv.includes('--install-silent');
+const hasSingleInstanceLock = isMaintenanceRun || app.requestSingleInstanceLock();
 
 if (!hasSingleInstanceLock) {
   app.quit();
@@ -301,7 +576,28 @@ if (!hasSingleInstanceLock) {
     }
   });
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
+    // Maintenance flags: run without a window, then exit.
+    if (process.argv.includes('--uninstall')) {
+      performUninstall();
+      app.quit();
+      return;
+    }
+    if (process.argv.includes('--install-silent')) {
+      try {
+        await performInstall();
+        if (!process.argv.includes('--no-skill')) await installAgentSkill();
+        app.quit();
+      } catch (error) {
+        try {
+          fs.writeFileSync(path.join(app.getPath('temp'), 'rendl-install.log'),
+            `install failed: ${error.message}\n${error.stack}\n`, 'utf8');
+        } catch { /* nothing more we can do */ }
+        app.exit(1);
+      }
+      return;
+    }
+
     createMainWindow();
 
     app.on('activate', () => {

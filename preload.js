@@ -35,6 +35,14 @@ contextBridge.exposeInMainWorld('rendl', {
   // Open links in the system browser.
   openExternal: (url) => ipcRenderer.invoke('shell:open-external', url),
 
+  // In-app installation (portable exe on Windows).
+  canInstall: () => ipcRenderer.invoke('app:can-install'),
+  installApp: () => ipcRenderer.invoke('app:install'),
+
+  // Persistent per-document history (cross-session undo).
+  historyGet: (documentPath) => ipcRenderer.invoke('history:get', documentPath),
+  historySave: (documentPath, entries) => ipcRenderer.invoke('history:save', documentPath, entries),
+
   // External open requests (second instance with a file argument).
   onOpenExternalFile: (callback) => ipcRenderer.on('file:open-external', (_event, filePath) => callback(filePath)),
 });

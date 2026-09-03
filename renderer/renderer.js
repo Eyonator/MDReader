@@ -197,6 +197,59 @@
     updateStatistics();
     editor.setScrollTop(0);
     editor.focus();
+    initHistory(path);
+  }
+
+  // ---------- persistent history (cross-session undo) ----------
+  // The editor's own Ctrl+Z/Ctrl+Y covers this session. On top of that we
+  // keep saved-state snapshots per document (stored by the main process in a
+  // hidden %LOCALAPPDATA%\Rendl\history folder). When the in-session history
+  // has nothing left to undo (content equals the session baseline), Ctrl+Z
+  // steps back through the persisted snapshots — also right after reopening
+  // a document in a fresh session. Ctrl+Y walks forward again.
+
+  const history = { stack: [], index: -1, baseline: '' };
+
+  async function initHistory(filePath) {
+    history.stack = [];
+    history.index = -1;
+    history.baseline = getMarkdown();
+    if (!filePath) return;
+
+    const entries = await api.historyGet(filePath);
+    const current = getMarkdown();
+    history.stack = entries;
+    if (history.stack.length === 0 || history.stack[history.stack.length - 1] !== current) {
+      history.stack.push(current);
+      api.historySave(filePath, history.stack);
+    }
+    history.index = history.stack.length - 1;
+  }
+
+  function recordHistory(content) {
+    if (!state.filePath) return;
+    if (history.stack[history.index] === content) return; // e.g. after a snapshot undo
+    history.stack = history.stack.slice(0, history.index + 1);
+    if (history.stack[history.stack.length - 1] !== content) history.stack.push(content);
+    history.index = history.stack.length - 1;
+    api.historySave(state.filePath, history.stack);
+  }
+
+  function tryHistoryStep(direction) {
+    if (!state.filePath) return false;
+    if (getMarkdown() !== history.baseline) return false; // session history is still active
+    const target = history.index + direction;
+    if (target < 0 || target >= history.stack.length) return false;
+
+    loadingDocument = true;
+    editor.setMarkdown(history.stack[target], false);
+    loadingDocument = false;
+    history.index = target;
+    history.baseline = getMarkdown();
+    updateDocumentChrome();
+    updateStatistics();
+    scheduleAutosave();
+    return true;
   }
 
   // ---------- change handling & autosave ----------
@@ -273,6 +326,7 @@
         const markdown = getMarkdown();
         const result = await api.saveFile(state.filePath, serializeContent(markdown));
         state.savedContent = markdown;
+        recordHistory(markdown);
         renderRecentList(result.recent);
         updateDocumentChrome();
         if (!silent) showToast(t('toast.saved', { name: result.name }));
@@ -293,6 +347,7 @@
       state.filePath = result.path;
       state.fileName = result.name;
       state.savedContent = markdown;
+      await initHistory(result.path);
       renderRecentList(result.recent);
       updateDocumentChrome();
       showToast(t('toast.saved', { name: result.name }));
@@ -366,6 +421,12 @@
   $('#btn-welcome-new').addEventListener('click', () => { hideWelcome(); editor.focus(); });
   $('#btn-welcome-open').addEventListener('click', openDocumentDialog);
 
+  const installButton = $('#btn-install');
+  installButton.addEventListener('click', async () => {
+    const installed = await api.installApp();
+    if (installed) installButton.hidden = true;
+  });
+
   for (const item of elements.modeSwitch.querySelectorAll('.segmented-item')) {
     item.addEventListener('click', () => applyEditorMode(item.dataset.mode));
   }
@@ -375,6 +436,16 @@
     if (!mod) return;
 
     const key = event.key.toLowerCase();
+    // Cross-session undo/redo: only intercepts when the in-session history
+    // has nothing left to do; otherwise the editor handles Ctrl+Z/Ctrl+Y.
+    if (key === 'z' && !event.shiftKey) {
+      if (tryHistoryStep(-1)) { event.preventDefault(); event.stopPropagation(); }
+      return;
+    }
+    if (key === 'y' || (key === 'z' && event.shiftKey)) {
+      if (tryHistoryStep(1)) { event.preventDefault(); event.stopPropagation(); }
+      return;
+    }
     if (key === 'n') { event.preventDefault(); newDocument(); }
     else if (key === 'o') { event.preventDefault(); openDocumentDialog(); }
     else if (key === 's' && event.shiftKey) { event.preventDefault(); saveDocumentAs(); }
@@ -439,6 +510,8 @@
     editor.setMarkdown(normalized, false);
     state.savedContent = getMarkdown();
     loadingDocument = false;
+    history.baseline = getMarkdown();
+    recordHistory(history.baseline);
     updateDocumentChrome();
     updateStatistics();
     editor.setScrollTop(scrollTop);
@@ -453,6 +526,7 @@
   // ---------- startup ----------
 
   applyStaticStrings();
+  installButton.hidden = !(await api.canInstall());
   state.systemTheme = await api.getSystemTheme();
   applyTheme();
   applyEditorMode(state.editorMode, { animate: false });
@@ -514,6 +588,10 @@
       confirmDiscard: async () => 'discard',
       onOpenExternalFile: () => {},
       openExternal: (url) => window.open(url, '_blank'),
+      canInstall: async () => false,
+      installApp: async () => false,
+      historyGet: async () => [],
+      historySave: async () => {},
     };
   }
 })();

@@ -294,6 +294,13 @@ a:focus-visible {
   stroke-linejoin: round;
 }
 
+.install-button {
+  margin-right: 4px;
+  padding: 5px 12px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+}
+
 /* theme icon: show only the icon for the current preference */
 .theme-icon { display: none; }
 body[data-theme-pref="light"] .theme-icon-light { display: block; }
