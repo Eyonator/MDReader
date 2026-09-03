@@ -115,7 +115,7 @@ function watchFile(filePath) {
 // new portable exe, quit, "--install-silent --relaunch". Other platforms
 // open the release page. A private repo (or being offline) fails silently.
 
-const UPDATE_REPO = 'Eyonator/MDReader';
+const UPDATE_REPO = 'Eyonator/Rendl';
 const UPDATE_RECHECK_DELAY_MS = 10 * 60 * 1000;
 let pendingUpdate = null;
 let updateRecheckAttempts = 0;
