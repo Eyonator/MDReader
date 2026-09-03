@@ -22,12 +22,6 @@
 
   "editor.placeholder": "Begin met schrijven… Markdown wordt live weergegeven in de leesweergave.",
 
-  "welcome.title": "Welkom bij Rendl",
-  "welcome.subtitle": "Schrijf in kale Markdown, lees het prachtig gerenderd. Een rustige, glasheldere omgeving voor je tekst.",
-  "welcome.newFile": "Nieuw bestand",
-  "welcome.openFile": "Bestand openen",
-  "welcome.hint": "Tip: sleep een .md-bestand in dit venster om het te openen.",
-
   "status.words": "{count} woorden",
   "status.characters": "{count} tekens",
   "status.readingTime": "{minutes} min. leestijd",
@@ -69,6 +63,11 @@
   "install.failed.message": "Rendl kon niet worden geïnstalleerd.",
 
   "update.available": "Update {version}",
+  "update.prompt.title": "Update beschikbaar",
+  "update.prompt.message": "Rendl {version} is beschikbaar. Nu bijwerken?",
+  "update.prompt.detail": "De update wordt gedownload en geïnstalleerd; Rendl start daarna vanzelf opnieuw. Kies je Later, dan blijft de updateknop in de werkbalk staan.",
+  "update.prompt.now": "Nu bijwerken",
+  "update.prompt.later": "Later",
   "update.tooltip": "Nieuwe versie beschikbaar — klik om bij te werken. Rendl start daarna opnieuw.",
   "update.downloading": "Downloaden…",
   "update.failed.title": "Update mislukt",

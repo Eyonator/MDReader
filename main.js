@@ -13,6 +13,8 @@ const RECENT_FILE_LIMIT = 12;
 const recentStorePath = () => path.join(app.getPath('userData'), 'recent-files.json');
 
 let mainWindow = null;
+let splashWindow = null;
+let splashShownAt = 0;
 let forceClose = false;
 let pendingOpenPath = resolveFileArgument(process.argv);
 
@@ -114,7 +116,9 @@ function watchFile(filePath) {
 // open the release page. A private repo (or being offline) fails silently.
 
 const UPDATE_REPO = 'Eyonator/MDReader';
+const UPDATE_RECHECK_DELAY_MS = 10 * 60 * 1000;
 let pendingUpdate = null;
+let updateRecheckAttempts = 0;
 
 function compareVersions(a, b) {
   const pa = String(a).split('.').map(Number);
@@ -141,51 +145,115 @@ async function checkForUpdates() {
 
     const assetName = `Rendl-${latestVersion}-win.exe`;
     const asset = (release.assets || []).find((entry) => entry.name === assetName);
+
+    // On Windows the update must install in place, never via the browser.
+    // A release whose Windows asset is still uploading (CI publishes per
+    // platform) is not offered yet; check again in a while.
+    if (process.platform === 'win32' && !asset) {
+      if (updateRecheckAttempts < 6) {
+        updateRecheckAttempts += 1;
+        setTimeout(checkForUpdates, UPDATE_RECHECK_DELAY_MS);
+      }
+      return;
+    }
+
     pendingUpdate = {
       version: latestVersion,
       assetUrl: asset ? asset.browser_download_url : null,
       releaseUrl: release.html_url,
     };
+
+    // Ask right away whether to install now; "later" keeps the topbar
+    // button available. (RENDL_UPDATE_CHOICE is an automation hook.)
+    if (process.platform === 'win32' && pendingUpdate.assetUrl && mainWindow) {
+      let response;
+      if (process.env.RENDL_UPDATE_CHOICE === 'now') response = 0;
+      else if (process.env.RENDL_UPDATE_CHOICE === 'later') response = 1;
+      else {
+        ({ response } = await dialog.showMessageBox(mainWindow, {
+          type: 'info',
+          title: t('update.prompt.title'),
+          message: t('update.prompt.message', { version: latestVersion }),
+          detail: t('update.prompt.detail'),
+          buttons: [t('update.prompt.now'), t('update.prompt.later')],
+          defaultId: 0,
+          cancelId: 1,
+          noLink: true,
+        }));
+      }
+      if (response === 0) {
+        try {
+          await startUpdateDownload();
+          return;
+        } catch (error) {
+          dialog.showErrorBox(t('update.failed.title'), `${t('update.failed.message')}\n${error.message}`);
+        }
+      }
+    }
+
     if (mainWindow) mainWindow.webContents.send('update:available', { version: latestVersion });
   } catch { /* offline, rate-limited or private repo: stay quiet */ }
+}
+
+async function startUpdateDownload() {
+  const response = await net.fetch(pendingUpdate.assetUrl, {
+    headers: { 'User-Agent': 'Rendl-updater' },
+  });
+  if (!response.ok) throw new Error(`download failed (${response.status})`);
+  const buffer = Buffer.from(await response.arrayBuffer());
+  const updateExe = path.join(app.getPath('temp'), `Rendl-${pendingUpdate.version}-update.exe`);
+  await fsp.writeFile(updateExe, buffer);
+
+  // Preserve the user's original agent-skill choice.
+  const skillInstalled = fs.existsSync(path.join(app.getPath('home'), '.claude', 'skills', 'rendl', 'SKILL.md'));
+  const updateArgs = ['--install-silent', ...(skillInstalled ? [] : ['--no-skill'])];
+
+  // Give this process a few seconds to exit, run the silent install and
+  // relaunch from the cmd chain itself: the portable launcher kills its
+  // own child processes via a job object when it exits, so the new app
+  // must be started by cmd (outside that job), not by the installer run.
+  const installedExe = path.join(INSTALL_DIR, 'Rendl.exe');
+  const chainLog = path.join(app.getPath('temp'), 'rendl-chain.log');
+  const chainScript = path.join(app.getPath('temp'), 'rendl-update.cmd');
+  fs.writeFileSync(chainScript, [
+    '@echo off',
+    `echo chain-start >> "${chainLog}"`,
+    'ping -n 4 127.0.0.1 > nul',
+    `"${updateExe}" ${updateArgs.join(' ')}`,
+    `echo installer-exit=%errorlevel% >> "${chainLog}"`,
+    `start "" "${installedExe}"`,
+    `echo relaunched >> "${chainLog}"`,
+    '',
+  ].join('\r\n'));
+  fs.writeFileSync(chainLog, 'spawning chain script\n');
+  const chainChild = spawn('cmd.exe', ['/c', chainScript], {
+    detached: true,
+    stdio: 'ignore',
+    windowsHide: true,
+    cwd: app.getPath('temp'),
+  });
+  chainChild.on('error', (error) => {
+    try { fs.appendFileSync(chainLog, `spawn-error: ${error.message}\n`); } catch { /* diagnostics only */ }
+  });
+  try { fs.appendFileSync(chainLog, `spawned pid=${chainChild.pid}\n`); } catch { /* diagnostics only */ }
+  chainChild.unref();
+
+  forceClose = true;
+  if (mainWindow) mainWindow.close();
 }
 
 ipcMain.handle('update:install', async () => {
   if (!pendingUpdate) return false;
 
-  // Only Windows gets the in-place update; elsewhere show the release page.
-  if (process.platform !== 'win32' || !pendingUpdate.assetUrl) {
+  // Windows always updates in place; other platforms open the download page.
+  if (process.platform !== 'win32') {
     shell.openExternal(pendingUpdate.releaseUrl);
     return false;
   }
+  if (!pendingUpdate.assetUrl) return false;
 
   try {
-    const response = await net.fetch(pendingUpdate.assetUrl, {
-      headers: { 'User-Agent': 'Rendl-updater' },
-    });
-    if (!response.ok) throw new Error(`download failed (${response.status})`);
-    const buffer = Buffer.from(await response.arrayBuffer());
-    const updateExe = path.join(app.getPath('temp'), `Rendl-${pendingUpdate.version}-update.exe`);
-    await fsp.writeFile(updateExe, buffer);
-
-    // Preserve the user's original agent-skill choice.
-    const skillInstalled = fs.existsSync(path.join(app.getPath('home'), '.claude', 'skills', 'rendl', 'SKILL.md'));
-    const updateArgs = ['--install-silent', ...(skillInstalled ? [] : ['--no-skill'])];
-
-    // Give this process a few seconds to exit, run the silent install and
-    // relaunch from the cmd chain itself: the portable launcher kills its
-    // own child processes via a job object when it exits, so the new app
-    // must be started by cmd (outside that job), not by the installer run.
-    const installedExe = path.join(INSTALL_DIR, 'Rendl.exe');
-    spawn('cmd.exe', ['/c', `ping -n 4 127.0.0.1 > nul & "${updateExe}" ${updateArgs.join(' ')} && start "" "${installedExe}"`], {
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-      cwd: app.getPath('temp'),
-    }).unref();
-
-    forceClose = true;
-    if (mainWindow) mainWindow.close();
+    await startUpdateDownload();
     return true;
   } catch (error) {
     dialog.showErrorBox(t('update.failed.title'), `${t('update.failed.message')}\n${error.message}`);
@@ -437,6 +505,35 @@ function performUninstall() {
   }
 }
 
+// Splash: a small transparent window with the spinning mark, shown while
+// the main window loads and for a minimum beat so it never just flashes.
+const SPLASH_MIN_VISIBLE_MS = 900;
+
+function createSplashWindow() {
+  splashShownAt = Date.now();
+  splashWindow = new BrowserWindow({
+    width: 280,
+    height: 280,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    alwaysOnTop: true,
+    skipTaskbar: true,
+    hasShadow: false,
+    webPreferences: { contextIsolation: true, sandbox: true },
+  });
+  splashWindow.loadFile(path.join(__dirname, 'renderer', 'splash.html'));
+  splashWindow.on('closed', () => { splashWindow = null; });
+}
+
+function closeSplashAndShowMainWindow() {
+  const remaining = Math.max(0, SPLASH_MIN_VISIBLE_MS - (Date.now() - splashShownAt));
+  setTimeout(() => {
+    if (splashWindow) splashWindow.close();
+    if (mainWindow) mainWindow.show();
+  }, remaining);
+}
+
 function createMainWindow() {
   mainWindow = new BrowserWindow({
     width: 1280,
@@ -467,7 +564,7 @@ function createMainWindow() {
   mainWindow.webContents.on('will-navigate', (event) => event.preventDefault());
   mainWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
 
-  mainWindow.once('ready-to-show', () => mainWindow.show());
+  mainWindow.once('ready-to-show', closeSplashAndShowMainWindow);
 
   // Intercept close so the renderer can flag unsaved changes first.
   mainWindow.on('close', (event) => {
@@ -694,6 +791,7 @@ if (!hasSingleInstanceLock) {
       return;
     }
 
+    createSplashWindow();
     createMainWindow();
     setTimeout(checkForUpdates, 3000);
 

@@ -17,7 +17,6 @@
     sidebar: $('#sidebar'),
     recentList: $('#recent-list'),
     recentEmpty: $('#recent-empty'),
-    welcome: $('#welcome'),
     toast: $('#toast'),
     dropIndicator: $('#drop-indicator'),
     modeSwitch: $('#mode-switch'),
@@ -192,7 +191,6 @@
     state.savedContent = getMarkdown();
     loadingDocument = false;
 
-    hideWelcome();
     updateDocumentChrome();
     updateStatistics();
     editor.setScrollTop(0);
@@ -259,7 +257,6 @@
 
   function handleEditorChange() {
     if (loadingDocument) return;
-    hideWelcome();
     updateDocumentChrome();
     updateStatistics();
     scheduleAutosave();
@@ -391,11 +388,7 @@
     renderRecentList(await api.listRecentFiles());
   }
 
-  // ---------- welcome, toast, sidebar ----------
-
-  function hideWelcome() {
-    elements.welcome.hidden = true;
-  }
+  // ---------- toast, sidebar ----------
 
   let toastTimer = null;
   function showToast(message) {
@@ -418,8 +411,6 @@
   $('#btn-sidebar').addEventListener('click', toggleSidebar);
   $('#btn-theme').addEventListener('click', cycleTheme);
   $('#btn-clear-recent').addEventListener('click', async () => renderRecentList(await api.clearRecentFiles()));
-  $('#btn-welcome-new').addEventListener('click', () => { hideWelcome(); editor.focus(); });
-  $('#btn-welcome-open').addEventListener('click', openDocumentDialog);
 
   const installButton = $('#btn-install');
   installButton.addEventListener('click', async () => {
@@ -557,7 +548,7 @@
   } else if (api.demoContent) {
     setDocument({ name: 'voorbeeld.md', content: api.demoContent });
   } else {
-    elements.welcome.hidden = false;
+    editor.focus();
   }
 
   positionSegmentedThumb(false);

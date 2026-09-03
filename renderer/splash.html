@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'unsafe-inline'; img-src 'self'" />
+  <title>Rendl</title>
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: transparent;
+      overflow: hidden;
+      -webkit-app-region: no-drag;
+      user-select: none;
+    }
+    .stage {
+      height: 100%;
+      display: grid;
+      place-items: center;
+    }
+    .mark {
+      width: 110px;
+      height: 110px;
+      animation: spin 1.4s cubic-bezier(0.6, 0.1, 0.4, 0.9) infinite;
+      filter: drop-shadow(0 12px 30px rgba(10, 132, 255, 0.45));
+    }
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    @media (prefers-reduced-motion: reduce) {
+      .mark { animation: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="stage">
+    <svg class="mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Rendl">
+      <defs>
+        <linearGradient id="s" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5AC8FA"/><stop offset=".45" stop-color="#0A84FF"/><stop offset="1" stop-color="#1C3A6E"/></linearGradient>
+        <linearGradient id="b" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0A84FF"/><stop offset=".55" stop-color="#9E8CFF"/><stop offset="1" stop-color="#ECEFF4"/></linearGradient>
+      </defs>
+      <path d="M150 420V209c0-60 49-109 109-109" fill="none" stroke="url(#s)" stroke-width="92" stroke-linecap="round"/>
+      <path d="M179 214c46-69 125-106 203-82 40 12 68 36 85 69" fill="none" stroke="url(#b)" stroke-width="84" stroke-linecap="round"/>
+    </svg>
+  </div>
+</body>
+</html>
