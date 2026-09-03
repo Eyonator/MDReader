@@ -128,19 +128,27 @@
     const el = document.createElement('section');
     el.className = 'editor-pane';
 
+    // Header strip (visible when split) naming the file shown in this pane.
+    const titleBar = document.createElement('div');
+    titleBar.className = 'pane-title';
+    const titleLabel = document.createElement('span');
+    titleLabel.className = 'pane-title-label';
     const closeButton = document.createElement('button');
     closeButton.className = 'pane-close';
     closeButton.title = t('split.close');
     closeButton.innerHTML = '<svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7m0-7l-7 7"/></svg>';
+    titleBar.append(titleLabel, closeButton);
 
     const host = document.createElement('div');
     host.className = 'editor-host';
-    el.append(closeButton, host);
+    el.append(titleBar, host);
     elements.panesRow.appendChild(el);
 
     const pane = {
       id: nextPaneId++,
       el,
+      titleLabel,
+      closeButton,
       tabId: null,
       mode: state.editorMode,
       loading: false,
@@ -202,8 +210,10 @@
     elements.panesRow.classList.toggle('is-split', panes.length > 1);
     for (const pane of panes) {
       pane.el.classList.toggle('is-active-pane', pane.id === activePaneId);
-      const closeButton = pane.el.querySelector('.pane-close');
-      if (closeButton) closeButton.hidden = panes.length <= 1;
+      pane.closeButton.hidden = panes.length <= 1;
+      const tab = tabById(pane.tabId);
+      pane.titleLabel.textContent = tab ? (tab.fileName || t('app.untitled')) : '';
+      pane.titleLabel.title = (tab && tab.filePath) || '';
     }
   }
 
@@ -354,6 +364,25 @@
     }
   }
 
+  // Tab drag-reordering: HTML5 drag & drop within the tab strip.
+  let draggedTabId = null;
+
+  function clearDropMarkers() {
+    for (const el of elements.tabbarTabs.querySelectorAll('.drop-before, .drop-after')) {
+      el.classList.remove('drop-before', 'drop-after');
+    }
+  }
+
+  function reorderTab(tabId, targetIndex) {
+    const from = tabs.findIndex((tab) => tab.id === tabId);
+    if (from < 0) return;
+    const [moved] = tabs.splice(from, 1);
+    if (targetIndex > from) targetIndex -= 1;
+    tabs.splice(Math.max(0, Math.min(targetIndex, tabs.length)), 0, moved);
+    renderTabs();
+    persistSession();
+  }
+
   function renderTabs() {
     elements.tabbarTabs.innerHTML = '';
     const active = activePane();
@@ -364,6 +393,35 @@
         + (active && pane && pane.id === active.id ? ' is-active' : '')
         + (pane ? ' is-open' : '');
       el.title = tab.filePath || t('app.untitled');
+      el.draggable = true;
+
+      el.addEventListener('dragstart', (event) => {
+        draggedTabId = tab.id;
+        event.dataTransfer.setData('text/rendl-tab', String(tab.id));
+        event.dataTransfer.effectAllowed = 'move';
+      });
+      el.addEventListener('dragend', () => { draggedTabId = null; clearDropMarkers(); });
+      el.addEventListener('dragover', (event) => {
+        if (draggedTabId === null || draggedTabId === tab.id) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'move';
+        const rect = el.getBoundingClientRect();
+        const before = event.clientX < rect.left + rect.width / 2;
+        clearDropMarkers();
+        el.classList.add(before ? 'drop-before' : 'drop-after');
+      });
+      el.addEventListener('drop', (event) => {
+        if (draggedTabId === null) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const rect = el.getBoundingClientRect();
+        const before = event.clientX < rect.left + rect.width / 2;
+        const index = tabs.indexOf(tab);
+        reorderTab(draggedTabId, before ? index : index + 1);
+        draggedTabId = null;
+        clearDropMarkers();
+      });
 
       const label = document.createElement('span');
       label.className = 'tab-label';
@@ -387,7 +445,22 @@
       el.addEventListener('auxclick', (event) => { if (event.button === 1) closeTab(tab.id); });
       elements.tabbarTabs.appendChild(el);
     }
+    updatePaneChrome();
   }
+
+  // Dropping on the empty strip after the last tab appends at the end.
+  elements.tabbarTabs.addEventListener('dragover', (event) => {
+    if (draggedTabId === null) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'move';
+  });
+  elements.tabbarTabs.addEventListener('drop', (event) => {
+    if (draggedTabId === null) return;
+    event.preventDefault();
+    reorderTab(draggedTabId, tabs.length);
+    draggedTabId = null;
+    clearDropMarkers();
+  });
 
   function updateWatchedFiles() {
     api.setWatchedFiles(tabs.map((tab) => tab.filePath).filter(Boolean));
@@ -873,7 +946,9 @@
   // editor's own image-drop handling doesn't swallow file drops).
   window.addEventListener('dragover', (event) => {
     event.preventDefault();
-    elements.dropIndicator.hidden = false;
+    // Only externally dragged files get the drop indicator, not tab drags.
+    const types = event.dataTransfer ? [...event.dataTransfer.types] : [];
+    if (types.includes('Files')) elements.dropIndicator.hidden = false;
   }, true);
   window.addEventListener('dragleave', (event) => {
     if (event.relatedTarget === null) elements.dropIndicator.hidden = true;

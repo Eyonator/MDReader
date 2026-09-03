@@ -560,22 +560,42 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
 
 .editor-host { flex: 1; min-height: 0; }
 
+/* header strip naming the file in each pane; only shown when split */
+.pane-title {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 8px 5px 16px;
+  border-bottom: 1px solid var(--glass-edge);
+}
+
+.panes-row.is-split .pane-title { display: flex; }
+
+.pane-title-label {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.editor-pane.is-active-pane .pane-title-label { color: var(--text-primary); }
+
 .pane-close {
-  position: absolute;
-  top: 7px;
-  right: 8px;
-  z-index: 6;
-  width: 22px;
-  height: 22px;
+  width: 20px;
+  height: 20px;
   display: grid;
   place-items: center;
-  border-radius: 7px;
+  border-radius: 6px;
   color: var(--text-tertiary);
-  background: var(--control-hover);
+  flex: 0 0 auto;
 }
 
 .pane-close:hover { background: var(--control-active); color: var(--text-primary); }
-.pane-close svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; fill: none; }
+.pane-close svg { width: 11px; height: 11px; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; fill: none; }
 
 /* ---------- tab bar ---------- */
 
@@ -629,6 +649,11 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
   border-color: var(--glass-edge);
   color: var(--text-primary);
 }
+
+/* drag-reordering feedback */
+.tab { -webkit-user-drag: element; }
+.tab.drop-before { box-shadow: inset 3px 0 0 var(--accent); }
+.tab.drop-after { box-shadow: inset -3px 0 0 var(--accent); }
 
 .tab-label {
   min-width: 0;
