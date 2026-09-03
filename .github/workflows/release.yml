@@ -33,6 +33,20 @@ jobs:
 
       - run: npm ci
 
+      # electron-builder's winCodeSign archive contains macOS symlinks that
+      # fail to extract without symlink privileges, aborting the build.
+      # Pre-extract it into the cache (the two failing symlinks are only
+      # needed for macOS signing); electron-builder then skips the download.
+      - name: Pre-extract winCodeSign (symlink workaround)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $cache = "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
+          New-Item -ItemType Directory -Force "$cache" | Out-Null
+          curl.exe -sL -o "$env:TEMP\winCodeSign.7z" "https://github.com/electron-userland/electron-builder-binaries/releases/download/winCodeSign-2.6.0/winCodeSign-2.6.0.7z"
+          7z x -y "$env:TEMP\winCodeSign.7z" "-o$cache\winCodeSign-2.6.0"
+          if (Test-Path "$cache\winCodeSign-2.6.0\rcedit-x64.exe") { exit 0 } else { exit 1 }
+
       - run: npx electron-builder ${{ matrix.args }} --publish never
 
       - name: Upload release assets
