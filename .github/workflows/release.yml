@@ -10,19 +10,9 @@ permissions:
 
 jobs:
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - os: windows-latest
-            args: --win
-          - os: macos-latest
-            args: --mac
-          - os: ubuntu-latest
-            args: --linux
-    runs-on: ${{ matrix.os }}
+    runs-on: windows-latest
     env:
-      # No code-signing certificates; ship unsigned builds.
+      # No code-signing certificate; ship unsigned builds.
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -38,7 +28,6 @@ jobs:
       # Pre-extract it into the cache (the two failing symlinks are only
       # needed for macOS signing); electron-builder then skips the download.
       - name: Pre-extract winCodeSign (symlink workaround)
-        if: runner.os == 'Windows'
         shell: pwsh
         run: |
           $cache = "$env:LOCALAPPDATA\electron-builder\Cache\winCodeSign"
@@ -47,12 +36,9 @@ jobs:
           7z x -y "$env:TEMP\winCodeSign.7z" "-o$cache\winCodeSign-2.6.0"
           if (Test-Path "$cache\winCodeSign-2.6.0\rcedit-x64.exe") { exit 0 } else { exit 1 }
 
-      - run: npx electron-builder ${{ matrix.args }} --publish never
+      - run: npx electron-builder --win --publish never
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            dist/*.exe
-            dist/*.dmg
-            dist/*.AppImage
+          files: dist/*.exe
