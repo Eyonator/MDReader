@@ -631,9 +631,10 @@ function createSplashWindow(labelText) {
     hasShadow: false,
     webPreferences: { contextIsolation: true, sandbox: true },
   });
-  splashWindow.loadFile(path.join(__dirname, 'renderer', 'splash.html'),
+  const loaded = splashWindow.loadFile(path.join(__dirname, 'renderer', 'splash.html'),
     labelText ? { query: { label: labelText } } : undefined);
   splashWindow.on('closed', () => { splashWindow = null; });
+  return loaded;
 }
 
 function closeSplashAndShowMainWindow() {
@@ -944,8 +945,18 @@ if (!hasSingleInstanceLock) {
     }
     if (process.argv.includes('--install-silent')) {
       try {
-        // Visual feedback while the update installs and relaunches.
-        createSplashWindow(t('update.installing'));
+        // Visual feedback while the update installs and relaunches. Wait for
+        // the splash to finish loading BEFORE the install starts: the copy
+        // runs with process.noAsar enabled, which would break the splash's
+        // own resource loading from app.asar and leave an invisible window.
+        try {
+          await createSplashWindow(t('update.installing'));
+        } catch (error) {
+          try {
+            fs.writeFileSync(path.join(app.getPath('temp'), 'rendl-splash.log'),
+              `splash load failed: ${(error && error.stack) || error}\n`, 'utf8');
+          } catch { /* diagnostics only */ }
+        }
         await performInstall();
         if (!process.argv.includes('--no-skill')) await installAgentSkill();
         if (splashWindow) splashWindow.close();
