@@ -282,7 +282,27 @@ async function startUpdateDownload() {
     headers: { 'User-Agent': 'Rendl-updater' },
   });
   if (!response.ok) throw new Error(`download failed (${response.status})`);
-  const buffer = Buffer.from(await response.arrayBuffer());
+
+  // Stream the download so the UI can show progress.
+  const total = Number(response.headers.get('content-length')) || 0;
+  const reader = response.body.getReader();
+  const chunks = [];
+  let received = 0;
+  let lastSent = -1;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    chunks.push(Buffer.from(value));
+    received += value.length;
+    if (total && mainWindow) {
+      const percent = Math.min(99, Math.round((received / total) * 100));
+      if (percent !== lastSent) {
+        lastSent = percent;
+        mainWindow.webContents.send('update:progress', percent);
+      }
+    }
+  }
+  const buffer = Buffer.concat(chunks);
   const updateExe = path.join(app.getPath('temp'), `Rendl-${pendingUpdate.version}-update.exe`);
   await fsp.writeFile(updateExe, buffer);
 
@@ -598,11 +618,11 @@ function performUninstall() {
 // the main window loads and for a minimum beat so it never just flashes.
 const SPLASH_MIN_VISIBLE_MS = 900;
 
-function createSplashWindow() {
+function createSplashWindow(labelText) {
   splashShownAt = Date.now();
   splashWindow = new BrowserWindow({
     width: 280,
-    height: 280,
+    height: 300,
     frame: false,
     transparent: true,
     resizable: false,
@@ -611,7 +631,8 @@ function createSplashWindow() {
     hasShadow: false,
     webPreferences: { contextIsolation: true, sandbox: true },
   });
-  splashWindow.loadFile(path.join(__dirname, 'renderer', 'splash.html'));
+  splashWindow.loadFile(path.join(__dirname, 'renderer', 'splash.html'),
+    labelText ? { query: { label: labelText } } : undefined);
   splashWindow.on('closed', () => { splashWindow = null; });
 }
 
@@ -923,8 +944,11 @@ if (!hasSingleInstanceLock) {
     }
     if (process.argv.includes('--install-silent')) {
       try {
+        // Visual feedback while the update installs and relaunches.
+        createSplashWindow(t('update.installing'));
         await performInstall();
         if (!process.argv.includes('--no-skill')) await installAgentSkill();
+        if (splashWindow) splashWindow.close();
         app.quit();
       } catch (error) {
         try {

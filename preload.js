@@ -49,6 +49,7 @@ contextBridge.exposeInMainWorld('rendl', {
 
   // Updates.
   onUpdateAvailable: (callback) => ipcRenderer.on('update:available', (_event, info) => callback(info)),
+  onUpdateProgress: (callback) => ipcRenderer.on('update:progress', (_event, percent) => callback(percent)),
   installUpdate: () => ipcRenderer.invoke('update:install'),
 
   // Persistent per-document history (cross-session undo).

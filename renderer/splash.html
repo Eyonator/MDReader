@@ -17,6 +17,16 @@
       height: 100%;
       display: grid;
       place-items: center;
+      align-content: center;
+      gap: 18px;
+    }
+    .label {
+      font-family: -apple-system, "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      font-weight: 600;
+      color: #9aa3b0;
+      text-align: center;
+      text-shadow: 0 1px 8px rgba(0, 0, 0, 0.35);
     }
     .mark {
       width: 110px;
@@ -43,6 +53,8 @@
       <path d="M150 420V209c0-60 49-109 109-109" fill="none" stroke="url(#s)" stroke-width="92" stroke-linecap="round"/>
       <path d="M179 214c46-69 125-106 203-82 40 12 68 36 85 69" fill="none" stroke="url(#b)" stroke-width="84" stroke-linecap="round"/>
     </svg>
+    <p class="label" id="label" hidden></p>
   </div>
+  <script src="splash.js"></script>
 </body>
 </html>

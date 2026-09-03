@@ -892,6 +892,13 @@
     updateButton.textContent = t('update.available', { version });
     updateButton.hidden = false;
   });
+  // Download progress — also covers the dialog-initiated update, where the
+  // button was never shown yet.
+  api.onUpdateProgress((percent) => {
+    updateButton.hidden = false;
+    updateButton.disabled = true;
+    updateButton.textContent = t('update.downloadingPct', { pct: percent });
+  });
   updateButton.addEventListener('click', async () => {
     // Unsaved untitled documents would be lost by the restart.
     if (!(await ensureAllTabsSettled())) return;
@@ -1128,6 +1135,7 @@
       historyGet: async () => [],
       historySave: async () => {},
       onUpdateAvailable: () => {},
+      onUpdateProgress: () => {},
       installUpdate: async () => false,
     };
   }

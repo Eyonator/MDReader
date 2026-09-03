@@ -86,6 +86,8 @@
   "update.prompt.later": "Later",
   "update.tooltip": "Nieuwe versie beschikbaar — klik om bij te werken. Rendl start daarna opnieuw.",
   "update.downloading": "Downloaden…",
+  "update.downloadingPct": "Downloaden… {pct}%",
+  "update.installing": "Bijwerken…",
   "update.failed.title": "Update mislukt",
   "update.failed.message": "De update kon niet worden gedownload of geïnstalleerd.",
 
