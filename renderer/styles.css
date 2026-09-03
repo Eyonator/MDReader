@@ -43,6 +43,7 @@ body[data-theme="light"] {
 
   --editor-selection: rgba(0, 122, 255, 0.18);
   --code-bg: rgba(20, 30, 50, 0.055);
+  --inline-code-bg: rgba(20, 30, 50, 0.09);
   --blockquote-bar: rgba(0, 122, 255, 0.45);
   --table-border: rgba(30, 40, 60, 0.12);
 
@@ -81,6 +82,7 @@ body[data-theme="dark"] {
 
   --editor-selection: rgba(10, 132, 255, 0.35);
   --code-bg: rgba(255, 255, 255, 0.07);
+  --inline-code-bg: rgba(255, 255, 255, 0.13);
   --blockquote-bar: rgba(10, 132, 255, 0.55);
   --table-border: rgba(255, 255, 255, 0.12);
 
@@ -556,13 +558,18 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
   border-radius: 12px;
 }
 
-.toastui-editor-contents code {
-  background: var(--code-bg);
-  color: inherit;
+/* Inline code: the bundled dark theme uses a low-contrast red on its own
+   dark chip; win on specificity and use readable primary text instead. */
+.toastui-editor-contents code,
+.toastui-editor-dark .toastui-editor-contents code,
+body[data-theme="light"] .toastui-editor-contents code {
+  background: var(--inline-code-bg);
+  color: var(--text-primary);
   border-radius: 6px;
 }
 
-.toastui-editor-contents pre code { background: none; }
+.toastui-editor-contents pre code,
+.toastui-editor-dark .toastui-editor-contents pre code { background: none; color: inherit; }
 
 .toastui-editor-contents table th,
 .toastui-editor-contents table td { border-color: var(--table-border); }
