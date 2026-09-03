@@ -1,0 +1,23 @@
+{
+  "name": "md-lezer",
+  "productName": "MD Lezer",
+  "version": "1.0.0",
+  "description": "A small, modern Windows app to read and write Markdown files.",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "build:editor": "esbuild build/editor-entry.js --bundle --minify --format=iife --outfile=renderer/vendor/toastui-bundle.js",
+    "postinstall": "npm run build:editor"
+  },
+  "author": "Vincent van Soelen",
+  "license": "MIT",
+  "devDependencies": {
+    "electron": "^41.7.1",
+    "esbuild": "^0.28.2",
+    "ws": "^8.21.3"
+  },
+  "dependencies": {
+    "@toast-ui/editor": "^3.2.2",
+    "@toast-ui/editor-plugin-code-syntax-highlight": "^3.1.0"
+  }
+}
