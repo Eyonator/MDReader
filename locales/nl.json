@@ -30,6 +30,10 @@
   "tabs.close": "Tabblad sluiten",
   "tabs.new": "Nieuw tabblad",
 
+  "split.toggle": "Naast elkaar openen (Ctrl+\\)",
+  "split.close": "Paneel sluiten",
+  "split.max": "Maximaal drie panelen naast elkaar",
+
   "editor.placeholder": "Begin met schrijven… Markdown wordt live weergegeven in de leesweergave.",
 
   "status.words": "{count} woorden",

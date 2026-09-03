@@ -1,7 +1,7 @@
 {
   "name": "rendl",
   "productName": "Rendl",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Rendl — Markdown reader & writer. Write plain. Read beautifully.",
   "main": "main.js",
   "scripts": {

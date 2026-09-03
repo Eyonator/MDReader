@@ -534,7 +534,48 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
   flex-direction: column;
 }
 
-#editor-root { flex: 1; min-height: 0; }
+/* ---------- split panes ---------- */
+
+.panes-row {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+.editor-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  border-left: 1px solid var(--glass-edge);
+}
+
+.editor-pane:first-child { border-left: none; }
+
+/* subtle accent on the focused pane, only when actually split */
+.panes-row.is-split .editor-pane.is-active-pane {
+  box-shadow: inset 0 2px 0 var(--accent);
+}
+
+.editor-host { flex: 1; min-height: 0; }
+
+.pane-close {
+  position: absolute;
+  top: 7px;
+  right: 8px;
+  z-index: 6;
+  width: 22px;
+  height: 22px;
+  display: grid;
+  place-items: center;
+  border-radius: 7px;
+  color: var(--text-tertiary);
+  background: var(--control-hover);
+}
+
+.pane-close:hover { background: var(--control-active); color: var(--text-primary); }
+.pane-close svg { width: 12px; height: 12px; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; fill: none; }
 
 /* ---------- tab bar ---------- */
 
@@ -581,6 +622,12 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
   border-color: var(--glass-border);
   color: var(--text-primary);
   box-shadow: inset 0 1px 0 var(--glass-highlight), 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+/* visible in another pane than the focused one */
+.tab.is-open:not(.is-active) {
+  border-color: var(--glass-edge);
+  color: var(--text-primary);
 }
 
 .tab-label {

@@ -11,7 +11,7 @@
 
   const elements = {
     body: document.body,
-    editorRoot: $('#editor-root'),
+    panesRow: $('#panes-row'),
     docName: $('#doc-name'),
     dirtyDot: $('#dirty-dot'),
     sidebar: $('#sidebar'),
@@ -42,8 +42,6 @@
     sidebarView: localStorage.getItem('sidebarView') === 'recent' ? 'recent' : 'project',
     project: null, // { root, name, files: [{path, relative}] }
   };
-
-  let loadingDocument = false; // Suppresses change handling while we set content.
 
   // The editor works in LF; the original line-ending style (and any BOM)
   // is restored/dropped when writing back to disk.
@@ -76,8 +74,6 @@
     elements.docName.textContent = t('app.untitled');
   }
 
-  // ---------- editor ----------
-
   // Register the editor's own UI strings from our locale file.
   if (strings.toastui) {
     toastui.Editor.setLanguage(['nl', 'nl-NL'], strings.toastui);
@@ -85,35 +81,16 @@
 
   const { codeSyntaxHighlight, Prism } = window.rendlEditorPlugins || {};
 
-  const editor = new toastui.Editor({
-    el: elements.editorRoot,
-    height: '100%',
-    initialEditType: state.editorMode,
-    previewStyle: 'tab',
-    hideModeSwitch: true,
-    usageStatistics: false,
-    autofocus: false,
-    language: 'nl-NL',
-    placeholder: t('editor.placeholder'),
-    plugins: codeSyntaxHighlight ? [[codeSyntaxHighlight, { highlighter: Prism }]] : [],
-    events: { change: handleEditorChange },
-  });
-
-  function getMarkdown() {
-    return editor.getMarkdown();
-  }
-
   // ---------- tabs ----------
-  // Each open document is a tab. The active tab's content lives in the
-  // editor; background tabs keep their markdown in `content`. Each tab has
-  // its own line-ending style, scroll position and undo-history state.
+  // Each open document is a tab. A tab shown in a pane lives in that pane's
+  // editor; other tabs keep their markdown in `content`. Each tab has its
+  // own line-ending style, scroll position and undo-history state.
 
   let nextTabId = 1;
   const tabs = [];
-  let activeTabId = null;
 
-  function activeTab() {
-    return tabs.find((tab) => tab.id === activeTabId) || null;
+  function tabById(id) {
+    return tabs.find((tab) => tab.id === id) || null;
   }
 
   function makeTab({ path = null, name = null, content = '' }) {
@@ -124,52 +101,169 @@
       eol: detectEol(content),
       content: normalizeContent(content),
       savedContent: normalizeContent(content),
-      needsBaseline: true, // savedContent becomes editor-normalized on first activation
+      needsBaseline: true, // savedContent becomes editor-normalized on first show
       scrollTop: 0,
       history: { stack: [], index: -1, baseline: '', pending: true },
     };
   }
 
+  // ---------- panes (split view) ----------
+  // One editor instance per pane; the focused pane is what the top bar,
+  // status bar and keyboard shortcuts act on.
+
+  const MAX_PANES = 3;
+  const panes = [];
+  let nextPaneId = 1;
+  let activePaneId = null;
+
+  function activePane() {
+    return panes.find((pane) => pane.id === activePaneId) || panes[0] || null;
+  }
+
+  function paneForTab(tabId) {
+    return panes.find((pane) => pane.tabId === tabId) || null;
+  }
+
+  function createPane() {
+    const el = document.createElement('section');
+    el.className = 'editor-pane';
+
+    const closeButton = document.createElement('button');
+    closeButton.className = 'pane-close';
+    closeButton.title = t('split.close');
+    closeButton.innerHTML = '<svg viewBox="0 0 12 12"><path d="M2.5 2.5l7 7m0-7l-7 7"/></svg>';
+
+    const host = document.createElement('div');
+    host.className = 'editor-host';
+    el.append(closeButton, host);
+    elements.panesRow.appendChild(el);
+
+    const pane = {
+      id: nextPaneId++,
+      el,
+      tabId: null,
+      mode: state.editorMode,
+      loading: false,
+      editor: null,
+    };
+
+    pane.editor = new toastui.Editor({
+      el: host,
+      height: '100%',
+      initialEditType: pane.mode,
+      previewStyle: 'tab',
+      hideModeSwitch: true,
+      usageStatistics: false,
+      autofocus: false,
+      language: 'nl-NL',
+      placeholder: t('editor.placeholder'),
+      plugins: codeSyntaxHighlight ? [[codeSyntaxHighlight, { highlighter: Prism }]] : [],
+      events: { change: () => handlePaneChange(pane) },
+    });
+
+    closeButton.addEventListener('click', (event) => { event.stopPropagation(); closePane(pane.id); });
+    el.addEventListener('mousedown', () => setActivePane(pane.id));
+    el.addEventListener('focusin', () => setActivePane(pane.id));
+
+    panes.push(pane);
+    applyThemeToPane(pane);
+    updatePaneChrome();
+    return pane;
+  }
+
+  function closePane(paneId) {
+    if (panes.length <= 1) return;
+    const pane = panes.find((entry) => entry.id === paneId);
+    if (!pane) return;
+    syncPaneIntoTab(pane);
+    pane.editor.destroy();
+    pane.el.remove();
+    panes.splice(panes.indexOf(pane), 1);
+    if (activePaneId === paneId) setActivePane(panes[0].id);
+    updatePaneChrome();
+    renderTabs();
+  }
+
+  function splitView() {
+    if (panes.length >= MAX_PANES) { showToast(t('split.max')); return; }
+    const pane = createPane();
+    const candidate = tabs.find((tab) => !paneForTab(tab.id));
+    if (candidate) {
+      showTabInPane(candidate, pane);
+    } else {
+      const tab = makeTab({ content: '' });
+      tabs.push(tab);
+      showTabInPane(tab, pane);
+    }
+    updatePaneChrome();
+  }
+
+  function updatePaneChrome() {
+    elements.panesRow.classList.toggle('is-split', panes.length > 1);
+    for (const pane of panes) {
+      pane.el.classList.toggle('is-active-pane', pane.id === activePaneId);
+      const closeButton = pane.el.querySelector('.pane-close');
+      if (closeButton) closeButton.hidden = panes.length <= 1;
+    }
+  }
+
+  function setActivePane(paneId) {
+    if (activePaneId === paneId) return;
+    activePaneId = paneId;
+    const pane = activePane();
+    if (pane) reflectEditorMode(pane.mode);
+    updatePaneChrome();
+    renderTabs();
+    renderProjectList();
+    updateDocumentChrome();
+    updateStatistics();
+  }
+
+  function getTabMarkdown(tab) {
+    const pane = paneForTab(tab.id);
+    return pane ? pane.editor.getMarkdown() : tab.content;
+  }
+
   function isTabDirty(tab) {
     if (!tab) return false;
-    if (tab.id === activeTabId) return getMarkdown() !== tab.savedContent;
-    if (tab.needsBaseline) return false; // untouched since load
-    return tab.content !== tab.savedContent;
+    if (!paneForTab(tab.id) && tab.needsBaseline) return false; // untouched since load
+    return getTabMarkdown(tab) !== tab.savedContent;
   }
 
   function serializeTabContent(tab, markdown) {
     return tab.eol === '\r\n' ? markdown.replace(/\n/g, '\r\n') : markdown;
   }
 
-  function syncActiveIntoTab() {
-    const tab = activeTab();
+  function syncPaneIntoTab(pane) {
+    const tab = tabById(pane.tabId);
     if (!tab) return;
-    tab.content = getMarkdown();
-    tab.scrollTop = editor.getScrollTop();
+    tab.content = pane.editor.getMarkdown();
+    tab.scrollTop = pane.editor.getScrollTop();
   }
 
-  function activateTab(id, { focus = true } = {}) {
-    if (id === activeTabId) return;
-    const target = tabs.find((tab) => tab.id === id);
-    if (!target) return;
+  function showTabInPane(tab, pane, { focus = true } = {}) {
+    const existingPane = paneForTab(tab.id);
+    if (existingPane && existingPane !== pane) { setActivePane(existingPane.id); return; }
+    if (pane.tabId === tab.id) { setActivePane(pane.id); return; }
 
-    if (activeTab()) syncActiveIntoTab();
+    syncPaneIntoTab(pane);
+    pane.tabId = tab.id;
 
-    activeTabId = id;
-    loadingDocument = true;
-    editor.setMarkdown(target.content, false);
-    if (target.needsBaseline) {
-      target.savedContent = getMarkdown();
-      target.needsBaseline = false;
+    pane.loading = true;
+    pane.editor.setMarkdown(tab.content, false);
+    if (tab.needsBaseline) {
+      tab.savedContent = pane.editor.getMarkdown();
+      tab.needsBaseline = false;
     }
-    target.content = getMarkdown();
-    loadingDocument = false;
+    tab.content = pane.editor.getMarkdown();
+    pane.loading = false;
 
-    if (target.history.pending) initHistory(target);
-    else activeHistoryToBaseline(target);
+    if (tab.history.pending) initHistory(tab);
+    else tab.history.baseline = tab.content;
 
-    editor.setScrollTop(target.scrollTop || 0);
-    if (focus) editor.focus();
+    pane.editor.setScrollTop(tab.scrollTop || 0);
+    if (focus) pane.editor.focus();
+    setActivePane(pane.id);
     renderTabs();
     renderProjectList();
     updateDocumentChrome();
@@ -177,10 +271,11 @@
     persistSession();
   }
 
-  function activeHistoryToBaseline(tab) {
-    // Re-anchor the cross-session baseline to the tab's current content so
-    // the snapshot walk keeps working after switching back to this tab.
-    tab.history.baseline = getMarkdown();
+  function activateTab(id, { focus = true } = {}) {
+    const tab = tabById(id);
+    if (!tab) return;
+    const pane = paneForTab(id) || activePane();
+    showTabInPane(tab, pane, { focus });
   }
 
   async function openInTab(filePath, { background = false } = {}) {
@@ -214,49 +309,60 @@
   }
 
   async function closeTab(id) {
-    const tab = tabs.find((entry) => entry.id === id);
+    const tab = tabById(id);
     if (!tab) return;
 
     if (isTabDirty(tab)) {
       if (tab.filePath) {
         await saveTab(tab, { silent: true });
       } else {
-        if (tab.id !== activeTabId) activateTab(tab.id);
+        activateTab(tab.id);
         const choice = await api.confirmDiscard({ documentName: tab.fileName || t('app.untitled') });
         if (choice === 'cancel') return;
         if (choice === 'save' && !(await saveTabAs(tab))) return;
       }
     }
 
+    const pane = paneForTab(tab.id);
     const index = tabs.indexOf(tab);
     tabs.splice(index, 1);
 
-    if (tab.id === activeTabId) {
-      activeTabId = null;
-      if (tabs.length === 0) {
-        newTab();
+    if (pane) {
+      pane.tabId = null;
+      const replacement = tabs.find((entry) => !paneForTab(entry.id));
+      if (replacement) {
+        showTabInPane(replacement, pane, { focus: pane.id === activePaneId });
+      } else if (panes.length > 1) {
+        closePane(pane.id);
       } else {
-        activateTab(tabs[Math.min(index, tabs.length - 1)].id);
+        newTab();
       }
-    } else {
-      renderTabs();
     }
+    renderTabs();
     updateWatchedFiles();
     persistSession();
   }
 
   function cycleTab(direction) {
     if (tabs.length < 2) return;
-    const index = tabs.findIndex((tab) => tab.id === activeTabId);
-    const next = (index + direction + tabs.length) % tabs.length;
-    activateTab(tabs[next].id);
+    const pane = activePane();
+    const index = tabs.findIndex((tab) => tab.id === pane.tabId);
+    for (let step = 1; step <= tabs.length; step++) {
+      const next = tabs[(index + direction * step + tabs.length * step) % tabs.length];
+      const otherPane = paneForTab(next.id);
+      if (!otherPane || otherPane === pane) { showTabInPane(next, pane); return; }
+    }
   }
 
   function renderTabs() {
     elements.tabbarTabs.innerHTML = '';
+    const active = activePane();
     for (const tab of tabs) {
+      const pane = paneForTab(tab.id);
       const el = document.createElement('div');
-      el.className = 'tab' + (tab.id === activeTabId ? ' is-active' : '');
+      el.className = 'tab'
+        + (active && pane && pane.id === active.id ? ' is-active' : '')
+        + (pane ? ' is-open' : '');
       el.title = tab.filePath || t('app.untitled');
 
       const label = document.createElement('span');
@@ -289,7 +395,8 @@
 
   function persistSession() {
     localStorage.setItem('openTabs', JSON.stringify(tabs.map((tab) => tab.filePath).filter(Boolean)));
-    const active = activeTab();
+    const pane = activePane();
+    const active = pane ? tabById(pane.tabId) : null;
     localStorage.setItem('activeTabPath', (active && active.filePath) || '');
   }
 
@@ -301,12 +408,16 @@
     return state.themePref === 'auto' ? state.systemTheme : state.themePref;
   }
 
+  function applyThemeToPane(pane) {
+    const editorUi = pane.el.querySelector('.toastui-editor-defaultUI');
+    if (editorUi) editorUi.classList.toggle('toastui-editor-dark', resolvedTheme() === 'dark');
+  }
+
   function applyTheme() {
     const theme = resolvedTheme();
     elements.body.dataset.theme = theme;
     elements.body.dataset.themePref = state.themePref;
-    const editorUi = elements.editorRoot.querySelector('.toastui-editor-defaultUI');
-    if (editorUi) editorUi.classList.toggle('toastui-editor-dark', theme === 'dark');
+    for (const pane of panes) applyThemeToPane(pane);
     api.setTitleBarSymbolColor(TITLEBAR_SYMBOL_COLORS[theme]);
   }
 
@@ -318,21 +429,28 @@
     showToast(t(`theme.${state.themePref}`));
   }
 
-  // ---------- mode (markdown source / live WYSIWYG) ----------
+  // ---------- mode (markdown source / live WYSIWYG), per pane ----------
 
-  function applyEditorMode(mode, { animate = true } = {}) {
-    state.editorMode = mode;
-    localStorage.setItem('editorMode', mode);
-
-    if (editor.isMarkdownMode() !== (mode === 'markdown')) {
-      editor.changeMode(mode, true);
-    }
-
+  function reflectEditorMode(mode) {
     for (const item of elements.modeSwitch.querySelectorAll('.segmented-item')) {
       item.classList.toggle('is-active', item.dataset.mode === mode);
       item.setAttribute('aria-selected', String(item.dataset.mode === mode));
     }
-    positionThumb(elements.modeSwitch, elements.segmentedThumb, animate);
+    positionThumb(elements.modeSwitch, elements.segmentedThumb, true);
+  }
+
+  function applyEditorMode(mode, { animate = true } = {}) {
+    state.editorMode = mode;
+    localStorage.setItem('editorMode', mode);
+    const pane = activePane();
+    if (pane) {
+      pane.mode = mode;
+      if (pane.editor.isMarkdownMode() !== (mode === 'markdown')) {
+        pane.editor.changeMode(mode, true);
+      }
+    }
+    reflectEditorMode(mode);
+    if (!animate) positionThumb(elements.modeSwitch, elements.segmentedThumb, false);
   }
 
   function positionThumb(container, thumb, animate = true) {
@@ -344,10 +462,15 @@
     if (!animate) requestAnimationFrame(() => { thumb.style.transition = ''; });
   }
 
-  // ---------- document chrome & statistics ----------
+  // ---------- document chrome & statistics (follow the active pane) -------
+
+  function activeTabOfPane() {
+    const pane = activePane();
+    return pane ? tabById(pane.tabId) : null;
+  }
 
   function updateDocumentChrome() {
-    const tab = activeTab();
+    const tab = activeTabOfPane();
     const dirty = isTabDirty(tab);
     const name = (tab && tab.fileName) || t('app.untitled');
     elements.docName.textContent = name;
@@ -362,7 +485,8 @@
   }
 
   function updateStatistics() {
-    const text = getMarkdown();
+    const tab = activeTabOfPane();
+    const text = tab ? getTabMarkdown(tab) : '';
     const words = text.trim() ? text.trim().split(/\s+/).length : 0;
     elements.statusWords.textContent = t('status.words', { count: words });
     elements.statusChars.textContent = t('status.characters', { count: text.length });
@@ -377,18 +501,20 @@
   // through the persisted snapshots. Ctrl+Y walks forward again.
 
   async function initHistory(tab) {
-    tab.history = { stack: [], index: -1, baseline: getMarkdown(), pending: false };
+    const shownIn = paneForTab(tab.id);
+    tab.history = { stack: [], index: -1, baseline: getTabMarkdown(tab), pending: false };
     if (!tab.filePath) return;
 
     const entries = await api.historyGet(tab.filePath);
-    if (tab.id !== activeTabId) { tab.history.pending = true; return; } // switched away meanwhile
-    const current = getMarkdown();
+    if (!paneForTab(tab.id)) { tab.history.pending = true; return; } // hidden meanwhile
+    const current = getTabMarkdown(tab);
     tab.history.stack = entries;
     if (tab.history.stack.length === 0 || tab.history.stack[tab.history.stack.length - 1] !== current) {
       tab.history.stack.push(current);
       api.historySave(tab.filePath, tab.history.stack);
     }
     tab.history.index = tab.history.stack.length - 1;
+    void shownIn;
   }
 
   function recordHistory(tab, content) {
@@ -402,43 +528,48 @@
   }
 
   function tryHistoryStep(direction) {
-    const tab = activeTab();
+    const pane = activePane();
+    const tab = pane ? tabById(pane.tabId) : null;
     if (!tab || !tab.filePath || tab.history.pending) return false;
-    if (getMarkdown() !== tab.history.baseline) return false; // session history is still active
+    if (pane.editor.getMarkdown() !== tab.history.baseline) return false; // session history active
     const target = tab.history.index + direction;
     if (target < 0 || target >= tab.history.stack.length) return false;
 
-    loadingDocument = true;
-    editor.setMarkdown(tab.history.stack[target], false);
-    loadingDocument = false;
+    pane.loading = true;
+    pane.editor.setMarkdown(tab.history.stack[target], false);
+    pane.loading = false;
     tab.history.index = target;
-    tab.history.baseline = getMarkdown();
+    tab.history.baseline = pane.editor.getMarkdown();
+    tab.content = tab.history.baseline;
     updateDocumentChrome();
     updateStatistics();
-    scheduleAutosave();
+    scheduleAutosave(tab);
     return true;
   }
 
   // ---------- change handling & autosave ----------
 
   const AUTOSAVE_DELAY_MS = 900;
-  let autosaveTimer = null;
+  const autosaveTimers = new Map();
 
-  function handleEditorChange() {
-    if (loadingDocument) return;
-    updateDocumentChrome();
-    updateStatistics();
-    scheduleAutosave();
+  function handlePaneChange(pane) {
+    if (pane.loading) return;
+    const tab = tabById(pane.tabId);
+    if (!tab) return;
+    tab.content = pane.editor.getMarkdown();
+    if (pane.id === activePaneId) {
+      updateDocumentChrome();
+      updateStatistics();
+    }
+    scheduleAutosave(tab);
   }
 
-  function scheduleAutosave() {
-    const tab = activeTab();
+  function scheduleAutosave(tab) {
     if (!tab || !tab.filePath) return; // An untitled document is saved via Ctrl+S first.
-    clearTimeout(autosaveTimer);
-    autosaveTimer = setTimeout(() => {
-      const current = activeTab();
-      if (current && current.filePath && isTabDirty(current)) saveTab(current, { silent: true });
-    }, AUTOSAVE_DELAY_MS);
+    clearTimeout(autosaveTimers.get(tab.id));
+    autosaveTimers.set(tab.id, setTimeout(() => {
+      if (tabs.includes(tab) && tab.filePath && isTabDirty(tab)) saveTab(tab, { silent: true });
+    }, AUTOSAVE_DELAY_MS));
   }
 
   // ---------- file actions ----------
@@ -447,7 +578,7 @@
     if (!tab) return false;
     try {
       if (tab.filePath) {
-        const markdown = tab.id === activeTabId ? getMarkdown() : tab.content;
+        const markdown = getTabMarkdown(tab);
         const result = await api.saveFile(tab.filePath, serializeTabContent(tab, markdown));
         tab.savedContent = markdown;
         tab.content = markdown;
@@ -468,7 +599,7 @@
   async function saveTabAs(tab) {
     if (!tab) return false;
     try {
-      const markdown = tab.id === activeTabId ? getMarkdown() : tab.content;
+      const markdown = getTabMarkdown(tab);
       const result = await api.saveFileDialog(serializeTabContent(tab, markdown), tab.fileName || 'naamloos.md');
       if (!result) return false;
       tab.filePath = result.path;
@@ -476,7 +607,7 @@
       tab.savedContent = markdown;
       tab.content = markdown;
       tab.history.pending = true;
-      if (tab.id === activeTabId) await initHistory(tab);
+      if (paneForTab(tab.id)) await initHistory(tab);
       renderRecentList(result.recent);
       renderTabs();
       updateWatchedFiles();
@@ -510,13 +641,13 @@
   // Saves every document; untitled dirty tabs get the keep/discard dialog.
   // Returns false when the user cancels.
   async function ensureAllTabsSettled() {
-    syncActiveIntoTab();
+    for (const pane of panes) syncPaneIntoTab(pane);
     for (const tab of [...tabs]) {
       if (!isTabDirty(tab)) continue;
       if (tab.filePath) {
         if (!(await saveTab(tab, { silent: true }))) return false;
       } else {
-        if (tab.id !== activeTabId) activateTab(tab.id);
+        activateTab(tab.id);
         const choice = await api.confirmDiscard({ documentName: tab.fileName || t('app.untitled') });
         if (choice === 'cancel') return false;
         if (choice === 'save' && !(await saveTabAs(tab))) return false;
@@ -544,7 +675,7 @@
     }
     elements.projectEmpty.hidden = true;
 
-    const active = activeTab();
+    const active = activeTabOfPane();
     let currentFolder = null;
     for (const file of project.files) {
       const separator = file.relative.includes('\\') ? '\\' : '/';
@@ -615,7 +746,7 @@
     elements.recentList.innerHTML = '';
     elements.recentEmpty.hidden = list.length > 0;
 
-    const active = activeTab();
+    const active = activeTabOfPane();
     for (const filePath of list) {
       const item = document.createElement('li');
       const button = document.createElement('button');
@@ -666,9 +797,10 @@
   $('#btn-new').addEventListener('click', newTab);
   $('#btn-new-tab').addEventListener('click', newTab);
   $('#btn-open').addEventListener('click', openDocumentDialog);
-  $('#btn-save').addEventListener('click', () => saveTab(activeTab()));
+  $('#btn-save').addEventListener('click', () => saveTab(activeTabOfPane()));
   $('#btn-sidebar').addEventListener('click', toggleSidebar);
   $('#btn-theme').addEventListener('click', cycleTheme);
+  $('#btn-split').addEventListener('click', splitView);
   $('#btn-clear-recent').addEventListener('click', async () => renderRecentList(await api.clearRecentFiles()));
   $('#btn-open-project').addEventListener('click', openProjectDialog);
 
@@ -720,13 +852,19 @@
     }
     if (key === 'n' || key === 't') { event.preventDefault(); newTab(); }
     else if (key === 'o') { event.preventDefault(); openDocumentDialog(); }
-    else if (key === 'w') { event.preventDefault(); const tab = activeTab(); if (tab) closeTab(tab.id); }
+    else if (key === 'w') {
+      event.preventDefault();
+      const tab = activeTabOfPane();
+      if (tab) closeTab(tab.id);
+    }
     else if (key === 'tab') { event.preventDefault(); cycleTab(event.shiftKey ? -1 : 1); }
-    else if (key === 's' && event.shiftKey) { event.preventDefault(); saveTabAs(activeTab()); }
-    else if (key === 's') { event.preventDefault(); saveTab(activeTab()); }
+    else if (key === '\\') { event.preventDefault(); splitView(); }
+    else if (key === 's' && event.shiftKey) { event.preventDefault(); saveTabAs(activeTabOfPane()); }
+    else if (key === 's') { event.preventDefault(); saveTab(activeTabOfPane()); }
     else if (key === 'e') {
       event.preventDefault();
-      applyEditorMode(state.editorMode === 'markdown' ? 'wysiwyg' : 'markdown');
+      const pane = activePane();
+      applyEditorMode(pane && pane.mode === 'markdown' ? 'wysiwyg' : 'markdown');
     }
     else if (key === 'b' && event.shiftKey) { event.preventDefault(); toggleSidebar(); }
   }, true);
@@ -773,9 +911,10 @@
     const tab = tabs.find((entry) => entry.filePath === path);
     if (!tab) return;
     const normalized = normalizeContent(content);
+    const pane = paneForTab(tab.id);
 
-    if (tab.id !== activeTabId) {
-      // Background tab: adopt the disk state unless it has unsaved changes.
+    if (!pane) {
+      // Hidden tab: adopt the disk state unless it has unsaved changes.
       if (!isTabDirty(tab)) {
         tab.eol = detectEol(content);
         tab.content = normalized;
@@ -786,24 +925,26 @@
       return;
     }
 
-    if (normalized === tab.savedContent || normalized === getMarkdown()) {
-      tab.savedContent = getMarkdown();
-      updateDocumentChrome();
+    if (normalized === tab.savedContent || normalized === pane.editor.getMarkdown()) {
+      tab.savedContent = pane.editor.getMarkdown();
+      if (pane.id === activePaneId) updateDocumentChrome();
       return;
     }
 
-    const scrollTop = editor.getScrollTop();
-    loadingDocument = true;
+    const scrollTop = pane.editor.getScrollTop();
+    pane.loading = true;
     tab.eol = detectEol(content);
-    editor.setMarkdown(normalized, false);
-    tab.savedContent = getMarkdown();
+    pane.editor.setMarkdown(normalized, false);
+    tab.savedContent = pane.editor.getMarkdown();
     tab.content = tab.savedContent;
-    loadingDocument = false;
-    tab.history.baseline = getMarkdown();
+    pane.loading = false;
+    tab.history.baseline = tab.savedContent;
     recordHistory(tab, tab.history.baseline);
-    updateDocumentChrome();
-    updateStatistics();
-    editor.setScrollTop(scrollTop);
+    if (pane.id === activePaneId) {
+      updateDocumentChrome();
+      updateStatistics();
+    }
+    pane.editor.setScrollTop(scrollTop);
     showToast(t('toast.reloaded'));
   });
 
@@ -817,8 +958,12 @@
   applyStaticStrings();
   installButton.hidden = !(await api.canInstall());
   state.systemTheme = await api.getSystemTheme();
+
+  const firstPane = createPane();
+  activePaneId = firstPane.id;
   applyTheme();
-  applyEditorMode(state.editorMode, { animate: false });
+  reflectEditorMode(state.editorMode);
+  positionThumb(elements.modeSwitch, elements.segmentedThumb, false);
   refreshRecentList();
   restoreProject();
 
@@ -850,7 +995,6 @@
   renderTabs();
   updateDocumentChrome();
   updateStatistics();
-  positionThumb(elements.modeSwitch, elements.segmentedThumb, false);
 
   // ---------- browser demo fallback ----------
   // Lets the UI run in a plain browser (no Electron preload) during development.
@@ -871,10 +1015,10 @@
         '## Mogelijkheden\n',
         '- Volwaardige opmaakwerkbalk boven de editor',
         '- Live (WYSIWYG) en opmaakweergave',
-        '- Projecten, tabbladen en automatisch opslaan\n',
+        '- Projecten, tabbladen, split view en automatisch opslaan\n',
         '> Dit is een voorbeelddocument in de browserdemo.\n',
         '```js\nfunction greet(name) {\n  return `Hallo, ${name}!`;\n}\n```\n',
-        '| Sneltoets | Actie |\n| --- | --- |\n| Ctrl+S | Opslaan |\n| Ctrl+W | Tabblad sluiten |\n',
+        '| Sneltoets | Actie |\n| --- | --- |\n| Ctrl+S | Opslaan |\n| Ctrl+\\\\ | Splitsen |\n',
         '- [x] Ontwerp\n- [ ] Vertalingen\n',
       ].join('\n'),
       openFileDialog: async () => null,
