@@ -17,7 +17,7 @@ Een **one-pager** die Rendl presenteert en distribueert:
 
 | Vraag | Besluit |
 | ----- | ------- |
-| Domeinnaam | **rendl.app** — beschikbaarheid/prijs nog checken vóór vastleggen |
+| Domeinnaam | **rendl.app** — geregistreerd op 2026-09-03 (Openprovider), nameservers ns1–ns3.sinius.nl |
 | Website-repo | **rendl-site** (eigen privé repo, Fundament als submodule) |
 | Prijsvorm | **Abonnement** (bedrag en interval nog open) |
 | PSP | **Stripe** (Checkout + Billing + customer portal + webhooks) |
@@ -174,7 +174,7 @@ Omdat Pro een abonnement is, is een eenmalige offline code niet genoeg: de licen
 
 ## Open vragen
 
-* [ ] **rendl.app**: beschikbaarheid en prijs checken, dan vastleggen.
+* [x] **rendl.app**: geregistreerd (2026-09-03, Openprovider, Sinius-nameservers) — nog wel DNS/SSL richting de DirectAdmin-omgeving inrichten.
 * [ ] Prijs van het abonnement: bedrag en interval (maand/jaar, of beide met jaarkorting)?
 * [ ] DirectAdmin-omgeving: PHP-versie (8.1+ vereist), SSL, deploy-methode.
 * [ ] Definitieve Pro-featurelijst: export + sync staan vast; wat nog meer?
