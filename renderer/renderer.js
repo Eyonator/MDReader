@@ -977,6 +977,11 @@
     api.confirmClose({ dirty: false, documentName: '', filePath: null, content: '' });
   });
 
+  // Before switching to the freshly installed copy, settle all documents.
+  api.onSettleRequested(async () => {
+    api.settleResponse(await ensureAllTabsSettled());
+  });
+
   api.onOpenExternalFile((filePath) => openInTab(filePath));
 
   // Live reload: the main process pushes the newest content when an open
@@ -1113,6 +1118,8 @@
       onSystemThemeChanged: () => {},
       onCloseRequested: () => {},
       confirmClose: async () => {},
+      onSettleRequested: () => {},
+      settleResponse: () => {},
       confirmDiscard: async () => 'discard',
       onOpenExternalFile: () => {},
       openExternal: (url) => window.open(url, '_blank'),

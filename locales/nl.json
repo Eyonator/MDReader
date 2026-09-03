@@ -72,7 +72,9 @@
   "install.confirm.cancel": "Annuleren",
   "install.done.title": "Geïnstalleerd",
   "install.done.message": "Rendl is geïnstalleerd.",
-  "install.done.detail": "Je vindt Rendl in het startmenu. Deze portable versie kun je blijven gebruiken of weggooien.",
+  "install.done.restartDetail": "Wil je nu overschakelen naar de geïnstalleerde versie? Deze portable sessie sluit dan; je geopende documenten worden automatisch heropend. Je vindt Rendl voortaan in het startmenu.",
+  "install.done.restart": "Nu herstarten",
+  "install.done.later": "Later",
   "install.failed.title": "Installeren mislukt",
   "install.failed.message": "Rendl kon niet worden geïnstalleerd.",
 

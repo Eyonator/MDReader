@@ -746,31 +746,89 @@ ipcMain.handle('app:confirm-discard', async (_event, { documentName }) => {
 
 ipcMain.handle('app:can-install', () => canInstall());
 
-ipcMain.handle('app:install', async () => {
-  const choice = await dialog.showMessageBox(mainWindow, {
-    type: 'question',
-    title: t('install.confirm.title'),
-    message: t('install.confirm.message'),
-    detail: t('install.confirm.detail', { dir: INSTALL_DIR }),
-    checkboxLabel: t('install.confirm.checkbox'),
-    checkboxChecked: true,
-    buttons: [t('install.confirm.ok'), t('install.confirm.cancel')],
-    defaultId: 0,
-    cancelId: 1,
-    noLink: true,
+// Starts the installed copy a moment after this (portable) process has
+// exited. The portable launcher's job object kills any process we spawn
+// directly, so the hand-off goes through the Task Scheduler, which starts
+// processes outside our job. The task and its scripts clean themselves up.
+function scheduleSwitchToInstalled(installedExe) {
+  const temp = app.getPath('temp');
+  const switchScript = path.join(temp, 'rendl-switch.cmd');
+  const switchLauncher = path.join(temp, 'rendl-switch.vbs');
+  fs.writeFileSync(switchScript, [
+    '@echo off',
+    'ping -n 3 127.0.0.1 > nul',
+    `start "" "${installedExe}"`,
+    'schtasks /delete /f /tn RendlSwitch >nul 2>&1',
+    `del "${switchLauncher}"`,
+    'del "%~f0"',
+    '',
+  ].join('\r\n'));
+  fs.writeFileSync(switchLauncher,
+    `CreateObject("Wscript.Shell").Run """${switchScript}""", 0, False\r\n`);
+  execFileSync('schtasks', ['/create', '/f', '/tn', 'RendlSwitch', '/tr', `wscript.exe "${switchLauncher}"`, '/sc', 'once', '/st', '23:59'], { windowsHide: true });
+  execFileSync('schtasks', ['/run', '/tn', 'RendlSwitch'], { windowsHide: true });
+}
+
+// Asks the renderer to settle every document (autosave + keep/discard
+// dialogs for untitled work). Resolves false when the user cancels.
+function settleRendererDocuments() {
+  return new Promise((resolve) => {
+    ipcMain.once('app:settle-response', (_event, ok) => resolve(Boolean(ok)));
+    mainWindow.webContents.send('app:settle-request');
   });
-  if (choice.response !== 0) return false;
+}
+
+ipcMain.handle('app:install', async () => {
+  let response = 0;
+  let checkboxChecked = true;
+  if (process.env.RENDL_INSTALL_CHOICE) { // automation hook
+    response = process.env.RENDL_INSTALL_CHOICE === 'cancel' ? 1 : 0;
+    checkboxChecked = process.env.RENDL_INSTALL_CHOICE !== 'yes-no-skill';
+  } else {
+    ({ response, checkboxChecked } = await dialog.showMessageBox(mainWindow, {
+      type: 'question',
+      title: t('install.confirm.title'),
+      message: t('install.confirm.message'),
+      detail: t('install.confirm.detail', { dir: INSTALL_DIR }),
+      checkboxLabel: t('install.confirm.checkbox'),
+      checkboxChecked: true,
+      buttons: [t('install.confirm.ok'), t('install.confirm.cancel')],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    }));
+  }
+  if (response !== 0) return false;
 
   try {
     await performInstall();
-    if (choice.checkboxChecked) await installAgentSkill();
-    await dialog.showMessageBox(mainWindow, {
-      type: 'info',
-      title: t('install.done.title'),
-      message: t('install.done.message'),
-      detail: t('install.done.detail'),
-      buttons: ['OK'],
-    });
+    if (checkboxChecked) await installAgentSkill();
+
+    // Offer to switch to the installed copy right away; open documents
+    // come back via session restore (shared user data).
+    let restart;
+    if (process.env.RENDL_INSTALL_RESTART) { // automation hook
+      restart = process.env.RENDL_INSTALL_RESTART === 'now' ? 0 : 1;
+    } else {
+      ({ response: restart } = await dialog.showMessageBox(mainWindow, {
+        type: 'question',
+        title: t('install.done.title'),
+        message: t('install.done.message'),
+        detail: t('install.done.restartDetail'),
+        buttons: [t('install.done.restart'), t('install.done.later')],
+        defaultId: 0,
+        cancelId: 1,
+        noLink: true,
+      }));
+    }
+
+    if (restart === 0) {
+      if (await settleRendererDocuments()) {
+        scheduleSwitchToInstalled(path.join(INSTALL_DIR, 'Rendl.exe'));
+        forceClose = true;
+        mainWindow.close();
+      }
+    }
     return true;
   } catch (error) {
     dialog.showErrorBox(t('install.failed.title'), `${t('install.failed.message')}\n${error.message}`);

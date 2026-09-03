@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('rendl', {
   // Close flow.
   onCloseRequested: (callback) => ipcRenderer.on('app:close-requested', () => callback()),
   confirmClose: (state) => ipcRenderer.invoke('app:confirm-close', state),
+
+  // Settle-request (before switching to the installed copy).
+  onSettleRequested: (callback) => ipcRenderer.on('app:settle-request', () => callback()),
+  settleResponse: (ok) => ipcRenderer.send('app:settle-response', ok),
   confirmDiscard: (info) => ipcRenderer.invoke('app:confirm-discard', info),
 
   // Open links in the system browser.
