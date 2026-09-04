@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 360" role="img" aria-labelledby="title">
+  <title id="title">Rendl vector logo for light backgrounds</title>
+  <defs><linearGradient id="g" x1=".1" y1=".9" x2=".9" y2=".1"><stop stop-color="#007AFF"/><stop offset=".5" stop-color="#5AC8FA"/><stop offset="1" stop-color="#3A2A63"/></linearGradient></defs>
+  <path d="M94 292V171c0-63 51-114 114-114h51" fill="none" stroke="url(#g)" stroke-width="62" stroke-linecap="round" stroke-linejoin="round"/>
+  <text x="342" y="258" fill="#1B1F26" font-family="Segoe UI Variable Display, Segoe UI, Inter, system-ui, sans-serif" font-size="236" font-weight="650" letter-spacing="-12">Rendl</text>
+</svg>

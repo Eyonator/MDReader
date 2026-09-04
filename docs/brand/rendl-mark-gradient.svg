@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Rendl gradient mark</title>
+  <desc id="desc">A continuous rounded ribbon forming a lowercase r.</desc>
+  <defs>
+    <linearGradient id="rendl-gradient" x1=".1" y1=".9" x2=".9" y2=".1">
+      <stop offset="0" stop-color="#0A84FF"/>
+      <stop offset=".48" stop-color="#5AC8FA"/>
+      <stop offset=".76" stop-color="#9E8CFF"/>
+      <stop offset="1" stop-color="#ECEFF4"/>
+    </linearGradient>
+  </defs>
+  <path d="M142 422V242c0-93 75-168 168-168h74" fill="none" stroke="url(#rendl-gradient)" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

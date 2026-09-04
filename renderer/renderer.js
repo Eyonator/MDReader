@@ -147,9 +147,10 @@
     const empty = document.createElement('div');
     empty.className = 'pane-empty';
     empty.innerHTML = '<svg class="pane-empty-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true">'
-      + '<defs><linearGradient id="pe' + nextPaneId + '" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5AC8FA"/><stop offset=".45" stop-color="#0A84FF"/><stop offset="1" stop-color="#1C3A6E"/></linearGradient></defs>'
-      + '<path d="M150 420V209c0-60 49-109 109-109" fill="none" stroke="url(#pe' + nextPaneId + ')" stroke-width="92" stroke-linecap="round"/>'
-      + '<path d="M179 214c46-69 125-106 203-82 40 12 68 36 85 69" fill="none" stroke="url(#pe' + nextPaneId + ')" stroke-width="84" stroke-linecap="round"/></svg>'
+      + '<defs><linearGradient id="pe' + nextPaneId + '" x1=".1" y1=".9" x2=".9" y2=".1">'
+      + '<stop offset="0" stop-color="#0A84FF"/><stop offset=".48" stop-color="#5AC8FA"/>'
+      + '<stop offset=".76" stop-color="#9E8CFF"/><stop offset="1" stop-color="#ECEFF4"/></linearGradient></defs>'
+      + '<path d="M142 422V242c0-93 75-168 168-168h74" fill="none" stroke="url(#pe' + nextPaneId + ')" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/></svg>'
       + '<p class="pane-empty-hint"></p>';
     empty.querySelector('.pane-empty-hint').textContent = t('empty.hint');
 

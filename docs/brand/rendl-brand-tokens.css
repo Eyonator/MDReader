@@ -1,0 +1,15 @@
+:root {
+  --rendl-light-base: #eef1f6;
+  --rendl-light-blue: #a7c9ff;
+  --rendl-light-violet: #d8c6ff;
+  --rendl-light-mint: #b3ecdd;
+  --rendl-light-text: #1b1f26;
+  --rendl-light-accent: #007aff;
+  --rendl-dark-base: #0d1015;
+  --rendl-dark-blue: #1c3a6e;
+  --rendl-dark-violet: #3a2a63;
+  --rendl-dark-teal: #123c38;
+  --rendl-dark-text: #eceff4;
+  --rendl-dark-accent: #0a84ff;
+  --rendl-cyan: #5ac8fa;
+}

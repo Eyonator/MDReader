@@ -1,64 +1,35 @@
-# Rendl
+# Rendl visual identity v3
 
-**Product descriptor:** Markdown reader & writer  
-**Tagline:** Write plain. Read beautifully.  
-**Pronunciation:** “REN-dəl”  
+**Domain:** [rendl.app](https://rendl.app)  
+**Descriptor:** Markdown reader & writer  
+**Tagline:** Write plain. Read beautifully.
 
-## Name rationale
+## Precision correction
 
-Rendl is derived from **render**: the defining interaction is moving between Markdown source and its rendered form. Dropping the second `er` makes the name compact and ownable without turning it into a generic Markdown pun.
+V3 repairs the inner junction identified in the enlarged review crop. The former dark-blue vertical edge and purple inner curve no longer diverge. The inside contour now exits the stem tangentially and follows one uninterrupted curve into the shoulder, while the outside contour follows the same motion at a consistent offset.
 
-The September 3, 2026 screening found no Markdown editor, text editor, writing app or notes app using **Rendl**. Search did find the term as a surname and a Czech lighting brand. This is a product-name screen, not legal trademark clearance; check relevant trademark classes, app stores and domains before launch.
+The result is a single constant-width glass ribbon without a wedge, purple tongue, secondary curve, seam or pinched throat. All other Rendl proportions and styling remain intact.
 
-## Visual idea
+## Palette from the application
 
-The mark is a lowercase `r` drawn as a continuous translucent ribbon. Its straight stem represents source text; its curved shoulder represents the rendered reading view. It deliberately avoids the generic paper-sheet, pencil and `M↓` symbols common to Markdown tools.
+### Dark
 
-## Palette — taken directly from the app
+`#0D1015` · `#1C3A6E` · `#3A2A63` · `#123C38` · `#0A84FF` · `#ECEFF4`
 
-### Light mode
+### Light
 
-| Role | Hex |
-|---|---|
-| Base | `#EEF1F6` |
-| Ambient blue | `#A7C9FF` |
-| Ambient violet | `#D8C6FF` |
-| Ambient mint | `#B3ECDD` |
-| Primary text | `#1B1F26` |
-| Accent | `#007AFF` |
+`#EEF1F6` · `#A7C9FF` · `#D8C6FF` · `#B3ECDD` · `#007AFF` · `#1B1F26`
 
-### Dark mode
+Supplementary cyan: `#5AC8FA`.
 
-| Role | Hex |
-|---|---|
-| Base | `#0D1015` |
-| Ambient blue | `#1C3A6E` |
-| Ambient violet | `#3A2A63` |
-| Ambient teal | `#123C38` |
-| Primary text | `#ECEFF4` |
-| Accent | `#0A84FF` |
+## Usage
 
-The supplementary cyan `#5AC8FA` already occurs in the welcome-glyph gradient in the app.
+- Use `rendl-icon-dark-master-alpha.png` as the canonical source and executable artwork.
+- Use `rendl-icon-light-master-alpha.png` for light promotional surfaces.
+- Use the dark/light horizontal lockups on matching surfaces.
+- Use `rendl-social-card-1200x630.png` for rendl.app social sharing.
+- The PNG series, favicon, Apple touch icon and multi-resolution Windows ICO are generated from the corrected v3 master.
 
-## Typography
+## Generation note
 
-Use the same family stack as the product: **Segoe UI Variable Display**, then **Segoe UI**, **Inter**, `system-ui`, sans-serif. This keeps the identity native to the Windows-focused interface.
-
-## Files and usage
-
-- `rendl-icon-dark.svg`: primary app/store icon.
-- `rendl-icon-light.svg`: light-mode promotional variant; do not swap the installed app icon with the OS theme.
-- `rendl-mark.svg`: transparent standalone mark.
-- `rendl-logo-light.svg`: dark wordmark for light surfaces.
-- `rendl-logo-dark.svg`: light wordmark for dark surfaces.
-- `rendl-icon-concept.png`: original image-generation exploration.
-- PNG exports cover common Electron sizes; `rendl.ico` contains Windows icon sizes.
-
-Use the dark icon as the canonical executable icon. Keep clear space around the standalone mark equal to at least one quarter of the stem width. Below 24 px, use the full app tile rather than the transparent mark.
-
-## Suggested product copy
-
-- Window/about name: **Rendl**
-- Long name: **Rendl — Markdown reader & writer**
-- One-line description: **A calm Windows app for writing Markdown and reading it beautifully.**
-- Tagline: **Write plain. Read beautifully.**
+The built-in image-generation workflow used the full v2 master as edit target and the user's enlarged crop as the problem-area reference. The geometry instruction required parallel offset contours, constant ribbon thickness, one tangent-continuous inside curve and uninterrupted shading through the bend.

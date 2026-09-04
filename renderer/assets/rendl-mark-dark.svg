@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Rendl monochrome dark mark</title>
+  <desc id="desc">A continuous rounded ribbon forming a lowercase r.</desc>
+  <path d="M142 422V242c0-93 75-168 168-168h74" fill="none" stroke="#1B1F26" stroke-width="92" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
