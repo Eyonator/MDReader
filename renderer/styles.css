@@ -560,6 +560,31 @@ body[data-theme-pref="auto"] .theme-icon-auto { display: block; }
 
 .editor-host { flex: 1; min-height: 0; }
 
+/* calm empty state: no document open in this pane */
+.pane-empty {
+  display: none;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.editor-pane.is-empty .editor-host { display: none; }
+.editor-pane.is-empty .pane-empty { display: flex; }
+
+.pane-empty-mark {
+  width: 60px;
+  height: 60px;
+  opacity: 0.3;
+}
+
+.pane-empty-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--text-tertiary);
+}
+
 /* header strip naming the file in each pane; only shown when split */
 .pane-title {
   display: none;

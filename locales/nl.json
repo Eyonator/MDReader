@@ -35,6 +35,7 @@
   "split.max": "Maximaal drie panelen naast elkaar",
 
   "editor.placeholder": "Begin met schrijven… Markdown wordt live weergegeven in de leesweergave.",
+  "empty.hint": "Open een bestand, of maak een nieuw document (Ctrl+N).",
 
   "status.words": "{count} woorden",
   "status.characters": "{count} tekens",

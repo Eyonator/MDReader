@@ -141,7 +141,19 @@
 
     const host = document.createElement('div');
     host.className = 'editor-host';
-    el.append(titleBar, host);
+
+    // Calm empty state for a pane without a document; an untitled document
+    // is only ever created by an explicit "new" action.
+    const empty = document.createElement('div');
+    empty.className = 'pane-empty';
+    empty.innerHTML = '<svg class="pane-empty-mark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" aria-hidden="true">'
+      + '<defs><linearGradient id="pe' + nextPaneId + '" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#5AC8FA"/><stop offset=".45" stop-color="#0A84FF"/><stop offset="1" stop-color="#1C3A6E"/></linearGradient></defs>'
+      + '<path d="M150 420V209c0-60 49-109 109-109" fill="none" stroke="url(#pe' + nextPaneId + ')" stroke-width="92" stroke-linecap="round"/>'
+      + '<path d="M179 214c46-69 125-106 203-82 40 12 68 36 85 69" fill="none" stroke="url(#pe' + nextPaneId + ')" stroke-width="84" stroke-linecap="round"/></svg>'
+      + '<p class="pane-empty-hint"></p>';
+    empty.querySelector('.pane-empty-hint').textContent = t('empty.hint');
+
+    el.append(titleBar, host, empty);
     elements.panesRow.appendChild(el);
 
     const pane = {
@@ -196,22 +208,18 @@
     if (panes.length >= MAX_PANES) { showToast(t('split.max')); return; }
     const pane = createPane();
     const candidate = tabs.find((tab) => !paneForTab(tab.id));
-    if (candidate) {
-      showTabInPane(candidate, pane);
-    } else {
-      const tab = makeTab({ content: '' });
-      tabs.push(tab);
-      showTabInPane(tab, pane);
-    }
+    if (candidate) showTabInPane(candidate, pane);
+    else setActivePane(pane.id); // stays empty; no unwanted untitled document
     updatePaneChrome();
   }
 
   function updatePaneChrome() {
     elements.panesRow.classList.toggle('is-split', panes.length > 1);
     for (const pane of panes) {
-      pane.el.classList.toggle('is-active-pane', pane.id === activePaneId);
-      pane.closeButton.hidden = panes.length <= 1;
       const tab = tabById(pane.tabId);
+      pane.el.classList.toggle('is-active-pane', pane.id === activePaneId);
+      pane.el.classList.toggle('is-empty', !tab);
+      pane.closeButton.hidden = panes.length <= 1;
       pane.titleLabel.textContent = tab ? (tab.fileName || t('app.untitled')) : '';
       pane.titleLabel.title = (tab && tab.filePath) || '';
     }
@@ -345,11 +353,17 @@
       } else if (panes.length > 1) {
         closePane(pane.id);
       } else {
-        newTab();
+        // No documents left: show the calm empty state — never auto-create
+        // an untitled document.
+        pane.loading = true;
+        pane.editor.setMarkdown('', false);
+        pane.loading = false;
       }
     }
     renderTabs();
     updateWatchedFiles();
+    updateDocumentChrome();
+    updateStatistics();
     persistSession();
   }
 
@@ -544,13 +558,24 @@
 
   function updateDocumentChrome() {
     const tab = activeTabOfPane();
+
+    if (!tab) {
+      // No document open: keep the chrome completely quiet.
+      elements.docName.textContent = '';
+      elements.dirtyDot.hidden = true;
+      elements.statusSaved.textContent = '';
+      elements.statusSaved.classList.remove('is-unsaved');
+      document.title = t('app.name');
+      return;
+    }
+
     const dirty = isTabDirty(tab);
-    const name = (tab && tab.fileName) || t('app.untitled');
+    const name = tab.fileName || t('app.untitled');
     elements.docName.textContent = name;
     elements.dirtyDot.hidden = !dirty;
 
     let statusKey = 'status.saved';
-    if (dirty) statusKey = tab && tab.filePath ? 'status.saving' : 'status.unsaved';
+    if (dirty) statusKey = tab.filePath ? 'status.saving' : 'status.unsaved';
     elements.statusSaved.textContent = t(statusKey);
     elements.statusSaved.classList.toggle('is-unsaved', dirty);
 
@@ -559,7 +584,13 @@
 
   function updateStatistics() {
     const tab = activeTabOfPane();
-    const text = tab ? getTabMarkdown(tab) : '';
+    if (!tab) {
+      elements.statusWords.textContent = '';
+      elements.statusChars.textContent = '';
+      elements.statusReading.textContent = '';
+      return;
+    }
+    const text = getTabMarkdown(tab);
     const words = text.trim() ? text.trim().split(/\s+/).length : 0;
     elements.statusWords.textContent = t('status.words', { count: words });
     elements.statusChars.textContent = t('status.characters', { count: text.length });
@@ -1069,15 +1100,12 @@
     activateTab((preferred || tabs[0]).id, { focus: false });
   }
 
-  if (tabs.length === 0) {
-    if (api.demoContent) {
-      const tab = makeTab({ name: 'voorbeeld.md', content: api.demoContent });
-      tabs.push(tab);
-      activateTab(tab.id, { focus: false });
-    } else {
-      newTab();
-    }
+  if (tabs.length === 0 && api.demoContent) {
+    const tab = makeTab({ name: 'voorbeeld.md', content: api.demoContent });
+    tabs.push(tab);
+    activateTab(tab.id, { focus: false });
   }
+  // With no tabs at all the pane simply shows its calm empty state.
 
   renderTabs();
   updateDocumentChrome();
