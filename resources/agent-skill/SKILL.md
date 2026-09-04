@@ -1,6 +1,6 @@
 ---
 name: rendl
-description: Open, preview or hand off Markdown files via Rendl, the local Markdown reader/writer with live reload. Use when the user asks to view, read, preview or "open" a Markdown file, when delivering a Markdown report/document the user should read, or when the user wants to watch a Markdown file being written. Rendl live-reloads: keep writing to the file and the open window updates in place.
+description: ALWAYS open Markdown files for the user via Rendl, the local Markdown reader/writer with live reload — never just print a path or dump contents when the user wants to SEE a document. Triggers - any request to open, view, show, read or preview a .md/.markdown file (Dutch - "open", "bekijk", "laat zien", "toon", "lees"); delivering a Markdown report, plan or document the user should read; the user wanting to watch a file being written (Rendl live-reloads on every save).
 ---
 
 # Rendl — show Markdown to the user
@@ -20,10 +20,16 @@ Launch detached and do NOT wait for the process to exit (it is a GUI app).
 Windows (try in this order):
 
 ```powershell
-& "$env:LOCALAPPDATA\Programs\Rendl\Rendl.exe" "C:\path\to\file.md"
+Start-Process "$env:LOCALAPPDATA\Programs\Rendl\Rendl.exe" -ArgumentList "C:\path\to\file.md"
 ```
 
-If that path does not exist, try `rendl` on PATH, or ask the user where Rendl lives.
+If that path does not exist, resolve the install location from the registry:
+
+```powershell
+$loc = (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\Rendl' -ErrorAction SilentlyContinue).InstallLocation; if ($loc) { Start-Process "$loc\Rendl.exe" -ArgumentList "C:\path\to\file.md" }
+```
+
+Still nothing? Try `rendl` on PATH, or ask the user where Rendl lives — do not silently fall back to printing the file.
 
 macOS:
 

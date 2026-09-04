@@ -491,6 +491,32 @@ async function performInstall() {
     regAdd(`${classes}\\${ext}\\OpenWithProgids`, PROG_ID, '');
   }
 
+  // "Open with" listing and Default Apps registration. The Applications
+  // entry puts Rendl in the "Open with" list; RegisteredApplications +
+  // Capabilities lets the user pick Rendl in Settings > Default apps.
+  // (Windows never lets an app force itself as default; the user confirms
+  // once via "Always" in Open with.)
+  const appKey = `${classes}\\Applications\\Rendl.exe`;
+  regAdd(appKey, 'FriendlyAppName', 'Rendl');
+  regAdd(`${appKey}\\shell\\open\\command`, null, `"${installedExe}" "%1"`);
+  regAdd(`${appKey}\\DefaultIcon`, null, `"${installedExe}",0`);
+  for (const ext of ASSOC_EXTENSIONS) {
+    regAdd(`${appKey}\\SupportedTypes`, ext, '');
+  }
+  regAdd('HKCU\\Software\\Rendl\\Capabilities', 'ApplicationName', 'Rendl');
+  regAdd('HKCU\\Software\\Rendl\\Capabilities', 'ApplicationDescription', 'Markdown reader & writer');
+  for (const ext of ASSOC_EXTENSIONS) {
+    regAdd('HKCU\\Software\\Rendl\\Capabilities\\FileAssociations', ext, PROG_ID);
+  }
+  regAdd('HKCU\\Software\\RegisteredApplications', 'Rendl', 'Software\\Rendl\\Capabilities');
+
+  // Tell Explorer the associations changed, so caches refresh right away.
+  try {
+    execFileSync('powershell', ['-NoProfile', '-Command',
+      'Add-Type -Namespace R -Name S -MemberDefinition \'[DllImport("shell32.dll")] public static extern void SHChangeNotify(int e, int f, IntPtr p1, IntPtr p2);\'; [R.S]::SHChangeNotify(0x08000000, 0, [IntPtr]::Zero, [IntPtr]::Zero)'],
+      { windowsHide: true });
+  } catch { /* cosmetic; takes effect after re-login otherwise */ }
+
   // Uninstall entry (Settings > Apps).
   const uninstallKey = 'HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Rendl';
   regAdd(uninstallKey, 'DisplayName', 'Rendl');
@@ -586,6 +612,11 @@ function performUninstall() {
     } catch { /* not registered */ }
   }
   regDelete(`${classes}\\${PROG_ID}`);
+  regDelete(`${classes}\\Applications\\Rendl.exe`);
+  regDelete('HKCU\\Software\\Rendl');
+  try {
+    execFileSync('reg', ['delete', 'HKCU\\Software\\RegisteredApplications', '/v', 'Rendl', '/f'], { windowsHide: true });
+  } catch { /* value may not exist */ }
   regDelete('HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Rendl');
 
   try {
